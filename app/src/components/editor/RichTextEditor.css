@@ -1,0 +1,287 @@
+/* 微信公众号编辑器风格 - 优化版 */
+
+.wechat-editor {
+  border: none;
+  border-radius: 0;
+  background: #fff;
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 拖拽上传遮罩 */
+.editor-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(7, 193, 96, 0.08);
+  border: 2px dashed #07c160;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+.editor-drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #07c160;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 上传进度提示 */
+.editor-upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f0fdf4;
+  border-bottom: 1px solid #e5e7eb;
+  color: #07c160;
+  font-size: 13px;
+}
+
+/* 工具栏 */
+.wechat-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: #e5e7eb;
+  margin: 0 6px;
+}
+
+/* 工具栏按钮 */
+.wechat-toolbar button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #555;
+  transition: all 0.15s;
+  font-size: 13px;
+}
+
+.wechat-toolbar button:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.wechat-toolbar button.active {
+  background: #07c160;
+  color: #fff;
+}
+
+.wechat-toolbar button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* 编辑器内容区 */
+.wechat-content {
+  flex: 1;
+  padding: 32px 48px;
+  overflow-y: auto;
+}
+
+.wechat-content .ProseMirror {
+  outline: none;
+  min-height: 400px;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #333;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* 段落 */
+.wechat-content .ProseMirror p {
+  margin: 0 0 16px 0;
+  text-align: justify;
+}
+
+/* 标题 */
+.wechat-content .ProseMirror h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111;
+  margin: 32px 0 16px 0;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.wechat-content .ProseMirror h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111;
+  margin: 28px 0 12px 0;
+  line-height: 1.4;
+  border-left: 3px solid #07c160;
+  padding-left: 10px;
+}
+
+/* 加粗 */
+.wechat-content .ProseMirror strong {
+  font-weight: 700;
+  color: #111;
+}
+
+/* 斜体 */
+.wechat-content .ProseMirror em {
+  font-style: italic;
+  color: #555;
+}
+
+/* 下划线 */
+.wechat-content .ProseMirror u {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 删除线 */
+.wechat-content .ProseMirror s {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* 高亮 */
+.wechat-content .ProseMirror mark {
+  background-color: #fef3c7;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* 链接 */
+.wechat-content .ProseMirror a {
+  color: #576b95;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(87, 107, 149, 0.3);
+}
+
+.wechat-content .ProseMirror a:hover {
+  border-bottom-color: #576b95;
+}
+
+/* 图片 */
+.wechat-content .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  margin: 16px 0;
+  border-radius: 4px;
+}
+
+/* 分割线 */
+.wechat-content .ProseMirror hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 24px 0;
+}
+
+/* 引用 */
+.wechat-content .ProseMirror blockquote {
+  border-left: 3px solid #07c160;
+  padding: 12px 16px;
+  margin: 16px 0;
+  color: #666;
+  background: #f9fafb;
+  border-radius: 0 4px 4px 0;
+  font-size: 14px;
+}
+
+/* 列表 */
+.wechat-content .ProseMirror ul,
+.wechat-content .ProseMirror ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.wechat-content .ProseMirror li {
+  margin: 4px 0;
+  line-height: 1.8;
+}
+
+.wechat-content .ProseMirror ul li {
+  list-style-type: disc;
+}
+
+.wechat-content .ProseMirror ol li {
+  list-style-type: decimal;
+}
+
+/* 代码（行内） */
+.wechat-content .ProseMirror code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 13px;
+  color: #e11d48;
+}
+
+/* 占位符 */
+.wechat-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9ca3af;
+  pointer-events: none;
+  height: 0;
+  font-size: 15px;
+}
+
+/* 选中样式 */
+.wechat-content .ProseMirror ::selection {
+  background: #bfdbfe;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .wechat-toolbar {
+    padding: 4px 8px;
+  }
+  
+  .wechat-toolbar button {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .toolbar-divider {
+    margin: 0 3px;
+  }
+  
+  .wechat-content .ProseMirror {
+    font-size: 14px;
+    min-height: 250px;
+  }
+  
+  .wechat-content {
+    padding: 16px;
+    min-height: 250px;
+  }
+}
