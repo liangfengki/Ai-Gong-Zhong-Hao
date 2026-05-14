@@ -3,15 +3,25 @@ import axios from 'axios';
 
 const router = Router();
 
+const MAX_PER_PAGE = 100;
+const DEFAULT_PER_PAGE = 20;
+
+function parsePerPage(value) {
+  const num = parseInt(value, 10);
+  if (Number.isNaN(num) || num < 1) return DEFAULT_PER_PAGE;
+  return Math.min(num, MAX_PER_PAGE);
+}
+
 // Unsplash 搜索（有 API Key 走官方 API，否则用 Lorem Picsum 兜底）
 router.get('/unsplash/search', async (req, res) => {
   try {
-    const { query, page = 1, per_page = 20, orientation } = req.query;
+    const { query, page = 1, per_page, orientation } = req.query;
+    const perPage = parsePerPage(per_page);
     const accessKey = process.env.UNSPLASH_ACCESS_KEY;
 
     if (!accessKey) {
       const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: perPage }, (_, i) => ({
         id: `picsum-${page}-${i}`,
         url: `https://picsum.photos/seed/${encodedQuery}-${page}-${i}/800/600`,
         thumbUrl: `https://picsum.photos/seed/${encodedQuery}-${page}-${i}/200/150`,
@@ -24,7 +34,7 @@ router.get('/unsplash/search', async (req, res) => {
     }
 
     const { data } = await axios.get('https://api.unsplash.com/search/photos', {
-      params: { query, page, per_page, orientation },
+      params: { query, page, per_page: perPage, orientation },
       headers: { Authorization: `Client-ID ${accessKey}` },
     });
     res.json(data);
@@ -37,12 +47,13 @@ router.get('/unsplash/search', async (req, res) => {
 // Pexels 搜索
 router.get('/pexels/search', async (req, res) => {
   try {
-    const { query, page = 1, per_page = 20, orientation } = req.query;
+    const { query, page = 1, per_page, orientation } = req.query;
+    const perPage = parsePerPage(per_page);
     const apiKey = process.env.PEXELS_API_KEY;
 
     if (!apiKey) {
       const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: perPage }, (_, i) => ({
         id: `picsum-pexels-${page}-${i}`,
         src: {
           original: `https://picsum.photos/seed/pexels-${encodedQuery}-${page}-${i}/1920/1080`,
@@ -56,7 +67,7 @@ router.get('/pexels/search', async (req, res) => {
     }
 
     const { data } = await axios.get('https://api.pexels.com/v1/search', {
-      params: { query, page, per_page, orientation },
+      params: { query, page, per_page: perPage, orientation },
       headers: { Authorization: apiKey },
     });
     res.json(data);
@@ -69,12 +80,13 @@ router.get('/pexels/search', async (req, res) => {
 // Pixabay 搜索
 router.get('/pixabay/search', async (req, res) => {
   try {
-    const { q, page = 1, per_page = 20 } = req.query;
+    const { q, page = 1, per_page } = req.query;
+    const perPage = parsePerPage(per_page);
     const apiKey = process.env.PIXABAY_API_KEY;
 
     if (!apiKey) {
       const encodedQuery = encodeURIComponent(q || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: perPage }, (_, i) => ({
         id: `picsum-pixabay-${page}-${i}`,
         largeImageURL: `https://picsum.photos/seed/pixabay-${encodedQuery}-${page}-${i}/800/600`,
         previewURL: `https://picsum.photos/seed/pixabay-${encodedQuery}-${page}-${i}/200/150`,
@@ -85,7 +97,7 @@ router.get('/pixabay/search', async (req, res) => {
     }
 
     const { data } = await axios.get('https://pixabay.com/api/', {
-      params: { key: apiKey, q, page, per_page, image_type: 'photo' },
+      params: { key: apiKey, q, page, per_page: perPage, image_type: 'photo' },
     });
     res.json(data);
   } catch (error) {
