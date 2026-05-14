@@ -127,8 +127,10 @@ export const useAppStore = create<AppStore>()(
       }),
 
       addArticleVersion: (version) => set((state) => {
-        const versions = [version, ...state.articleVersions.filter((v) => v.articleId === version.articleId)];
-        return { articleVersions: versions.slice(0, 20) };
+        const otherVersions = state.articleVersions.filter((v) => v.articleId !== version.articleId);
+        const sameArticleVersions = state.articleVersions.filter((v) => v.articleId === version.articleId);
+        const updated = [version, ...sameArticleVersions].slice(0, 20);
+        return { articleVersions: [...otherVersions, ...updated] };
       }),
 
       deleteArticleVersion: (versionId) => set((state) => ({
