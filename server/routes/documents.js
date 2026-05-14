@@ -34,8 +34,8 @@ function saveDocuments(docs) {
 router.get('/', (req, res) => {
   const docs = loadDocuments();
   const { page = 1, limit = 50 } = req.query;
-  const p = Math.max(1, parseInt(page));
-  const l = Math.min(100, Math.max(1, parseInt(limit)));
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
   const start = (p - 1) * l;
   const items = docs.slice(start, start + l).map(({ id, title, updatedAt, createdAt }) => ({
     id, title, updatedAt, createdAt,

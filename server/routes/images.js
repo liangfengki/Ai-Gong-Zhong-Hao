@@ -11,7 +11,7 @@ router.get('/unsplash/search', async (req, res) => {
 
     if (!accessKey) {
       const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: parseInt(per_page, 10) || 20 }, (_, i) => ({
         id: `picsum-${page}-${i}`,
         url: `https://picsum.photos/seed/${encodedQuery}-${page}-${i}/800/600`,
         thumbUrl: `https://picsum.photos/seed/${encodedQuery}-${page}-${i}/200/150`,
@@ -42,7 +42,7 @@ router.get('/pexels/search', async (req, res) => {
 
     if (!apiKey) {
       const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: parseInt(per_page, 10) || 20 }, (_, i) => ({
         id: `picsum-pexels-${page}-${i}`,
         src: {
           original: `https://picsum.photos/seed/pexels-${encodedQuery}-${page}-${i}/1920/1080`,
@@ -74,7 +74,7 @@ router.get('/pixabay/search', async (req, res) => {
 
     if (!apiKey) {
       const encodedQuery = encodeURIComponent(q || 'nature');
-      const images = Array.from({ length: parseInt(per_page) }, (_, i) => ({
+      const images = Array.from({ length: parseInt(per_page, 10) || 20 }, (_, i) => ({
         id: `picsum-pixabay-${page}-${i}`,
         largeImageURL: `https://picsum.photos/seed/pixabay-${encodedQuery}-${page}-${i}/800/600`,
         previewURL: `https://picsum.photos/seed/pixabay-${encodedQuery}-${page}-${i}/200/150`,
