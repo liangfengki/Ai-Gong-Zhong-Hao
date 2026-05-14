@@ -34,7 +34,7 @@ export function DashboardPage() {
       title: '追热点',
       description: '基于热点生成文章',
       icon: Flame,
-      path: '/',
+      path: '/topics',
       color: 'bg-orange-500',
     },
     {
@@ -128,7 +128,7 @@ export function DashboardPage() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => navigate('/editor')}
+              onClick={() => navigate('/articles')}
             >
               查看全部
               <ArrowRight className="ml-1 h-4 w-4" />
@@ -196,10 +196,10 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">今日热点</CardTitle>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/topics')}
             >
               查看全部
               <ArrowRight className="ml-1 h-4 w-4" />
@@ -214,7 +214,7 @@ export function DashboardPage() {
                   variant="outline" 
                   size="sm" 
                   className="mt-4"
-                  onClick={() => navigate('/')}
+                  onClick={() => navigate('/topics')}
                 >
                   查看热点
                 </Button>
