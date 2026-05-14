@@ -22,7 +22,7 @@ interface DyCookieResponse {
   };
 }
 
-// 获取抖音临时 Cookis
+// 获取抖音临时 Cookie
 const getDyCookies = async () => {
   try {
     const cookisUrl = "https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383";

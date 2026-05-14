@@ -59,7 +59,7 @@ export const get = async <T = unknown>(options: Get): Promise<RequestResult<T>> 
     else {
       const cachedData = await getCache(url);
       if (cachedData) {
-        logger.info("💾 [CHCHE] The request is cached");
+        logger.info("💾 [CACHE] The request is cached");
         return {
           fromCache: true,
           updateTime: cachedData.updateTime,
@@ -93,7 +93,7 @@ export const post = async <T = unknown>(options: Post): Promise<RequestResult<T>
     else {
       const cachedData = await getCache(url);
       if (cachedData) {
-        logger.info("💾 [CHCHE] The request is cached");
+        logger.info("💾 [CACHE] The request is cached");
         return { fromCache: true, updateTime: cachedData.updateTime, data: cachedData.data as T };
       }
     }
