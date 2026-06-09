@@ -123,7 +123,14 @@ const getList = async (options: Options, noCache: boolean): Promise<RouterResTyp
       },
       noCache,
     });
-    const list = result.data.data!.list;
+    const list = result.data?.data?.list;
+    if (!Array.isArray(list)) {
+      return {
+        fromCache: result.fromCache,
+        updateTime: result.updateTime,
+        data: [],
+      };
+    }
     return {
       ...result,
       data: list.map((v) => ({

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Sliders, Eye, RotateCcw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SafeHtml } from '@/components/ui/safe-html';
 import {
   Dialog,
   DialogContent,
@@ -71,8 +72,8 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
       const pc = (t.styles.p.color as string) || '#333';
       const ac = h2c;
       const bqb = (t.styles.blockquote.backgroundColor as string) || '#f8f9fa';
-      const br = parseInt(String(t.styles.img.borderRadius || '4')) || 4;
-      const fs = parseInt(String(t.styles.body.fontSize || '15')) || 15;
+      const br = parseInt(String(t.styles.img.borderRadius || '4'), 10) || 4;
+      const fs = parseInt(String(t.styles.body.fontSize || '15'), 10) || 15;
       const lh = Math.round(parseFloat(String(t.styles.body.lineHeight || '1.8')) * 10);
       const ffi = fontOptions.findIndex(f => f.value === t.styles.body.fontFamily);
       setConfig({
@@ -327,9 +328,9 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   实时预览
                 </Label>
               </div>
-              <div
+              <SafeHtml
+                html={previewHtml}
                 className="border rounded-lg p-4 min-h-[300px] bg-white overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
               />
             </div>
           </div>

@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { SafeHtml } from '@/components/ui/safe-html';
 
 interface PhonePreviewProps {
   title: string;
@@ -86,14 +87,12 @@ export function PhonePreview({ title, content }: PhonePreviewProps) {
 
               {/* Article Content */}
               <div className="flex-1 overflow-y-auto px-4 py-4 overscroll-contain">
-                <div
+                <SafeHtml
+                  html={content || '<p style="color:#bbb;text-align:center;padding:40px 0;">暂无内容</p>'}
                   className="text-[15px] leading-[1.85] text-[#333] selection:bg-blue-100"
                   style={{
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif',
                     wordBreak: 'break-word',
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: content || '<p style="color:#bbb;text-align:center;padding:40px 0;">暂无内容</p>'
                   }}
                 />
               </div>

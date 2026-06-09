@@ -1,10 +1,53 @@
 import axios from 'axios';
 
+// 允许的 AI API 域名白名单（防止 SSRF）
+const ALLOWED_BASE_URLS = [
+  'https://api.deepseek.com',
+  'https://api.openai.com',
+  'https://api.anthropic.com',
+  'https://api.moonshot.cn',
+  'https://dashscope.aliyuncs.com',
+  'https://open.bigmodel.cn',
+  'https://api.baichuan-ai.com',
+  'https://api.lingyiwanwu.com',
+  'https://openrouter.ai',
+  'https://api.siliconflow.cn',
+  'https://api.hunyuan.cloud.tencent.com',
+];
+
+function isAllowedBaseUrl(url) {
+  try {
+    const parsed = new URL(url);
+    // 禁止内网地址
+    const hostname = parsed.hostname;
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.match(/^172\.(1[6-9]|2\d|3[01])\./) ||
+      hostname === '[::1]' ||
+      hostname.endsWith('.local')
+    ) {
+      return false;
+    }
+    return ALLOWED_BASE_URLS.some(allowed => url.startsWith(allowed));
+  } catch {
+    return false;
+  }
+}
+
 // 获取 API 配置（支持前端自定义 > 环境变量）
 export function getAIConfig(req) {
   const apiKey = req.headers['x-api-key'] || process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY;
   let baseUrl = req.headers['x-base-url'] || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1';
   const model = req.headers['x-model'] || req.body?.model || process.env.DEFAULT_MODEL || 'deepseek-chat';
+
+  // SSRF 防护：验证 base URL
+  if (req.headers['x-base-url'] && !isAllowedBaseUrl(baseUrl)) {
+    throw new Error('不支持的 API 地址，请使用已知的 AI 服务商地址');
+  }
 
   // 自动补全 /v1 后缀（兼容不带 /v1 的中转站）
   baseUrl = baseUrl.replace(/\/$/, '');
@@ -37,6 +80,7 @@ export async function generateArticle({ prompt, wordCount, apiKey, baseUrl, mode
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
+      timeout: 120000, // 2 分钟超时
     }
   );
 
@@ -67,6 +111,7 @@ export async function generateArticleStream({ prompt, wordCount, apiKey, baseUrl
         Authorization: `Bearer ${apiKey}`,
       },
       responseType: 'stream',
+      timeout: 300000, // 5 分钟超时（流式生成较慢）
     }
   );
 
@@ -76,20 +121,29 @@ export async function generateArticleStream({ prompt, wordCount, apiKey, baseUrl
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  let closed = false;
+
+  const closeStream = () => {
+    if (closed) return;
+    closed = true;
+    try { res.end(); } catch { /* already closed */ }
+  };
+
   response.data.on('data', (chunk) => {
+    if (closed) return;
     const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         const data = line.slice(6);
         if (data === '[DONE]') {
           res.write('data: [DONE]\n\n');
-          res.end();
+          closeStream();
           return;
         }
         try {
           const parsed = JSON.parse(data);
           const content = parsed.choices[0]?.delta?.content || '';
-          if (content) {
+          if (content && !closed) {
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         } catch {
@@ -100,13 +154,17 @@ export async function generateArticleStream({ prompt, wordCount, apiKey, baseUrl
   });
 
   response.data.on('end', () => {
-    res.write('data: [DONE]\n\n');
-    res.end();
+    if (!closed) {
+      res.write('data: [DONE]\n\n');
+    }
+    closeStream();
   });
 
   response.data.on('error', (err) => {
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-    res.end();
+    if (!closed) {
+      try { res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`); } catch { /* ignore */ }
+    }
+    closeStream();
   });
 }
 
@@ -129,6 +187,7 @@ export async function generateImage({ prompt, size, apiKey, baseUrl }) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
+      timeout: 120000, // 2 分钟超时
     }
   );
 

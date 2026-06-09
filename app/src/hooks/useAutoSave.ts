@@ -9,28 +9,37 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
   const { currentArticle, setCurrentArticle, addArticle, updateArticle } = useAppStore();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestRef = useRef({ title, content, wordCount });
+  const articleIdRef = useRef<string | undefined>(currentArticle?.id);
 
-  // Keep latest values in ref without triggering effect re-run
-  latestRef.current = { title, content, wordCount };
+  // 使用 useEffect 同步 articleId ref（更符合 React 最佳实践）
+  useEffect(() => {
+    if (currentArticle?.id && articleIdRef.current !== currentArticle.id) {
+      articleIdRef.current = currentArticle.id;
+    }
+  }, [currentArticle?.id]);
 
-  const doSave = useCallback(() => {
-    const { title: t, content: c, wordCount: wc } = latestRef.current;
+  const doSave = useCallback((t: string, c: string, wc: number) => {
     if (!t && !c) return;
 
     setSaveStatus('saving');
+    // Read currentArticle from store at save time (not from closure)
+    const current = useAppStore.getState().currentArticle;
+    const articleId = articleIdRef.current || current?.id || uuidv4();
+    if (!articleIdRef.current) {
+      articleIdRef.current = articleId;
+    }
     const article: Article = {
-      id: currentArticle?.id || uuidv4(),
+      id: articleId,
       title: t || '未命名文章',
       content: c,
       wordCount: wc,
-      tags: currentArticle?.tags || [],
-      createdAt: currentArticle?.createdAt || new Date().toISOString(),
+      tags: current?.tags || [],
+      createdAt: current?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'draft',
     };
     setCurrentArticle(article);
-    if (currentArticle) {
+    if (current) {
       updateArticle(article.id, {
         title: article.title,
         content: article.content,
@@ -41,7 +50,7 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
       addArticle(article);
     }
     setSaveStatus('saved');
-  }, [currentArticle, setCurrentArticle, addArticle, updateArticle]);
+  }, [setCurrentArticle, addArticle, updateArticle]);
 
   // Debounce 3s: schedule save on content change
   useEffect(() => {
@@ -49,7 +58,7 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
 
     setSaveStatus('unsaved');
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(doSave, 3000);
+    timerRef.current = setTimeout(() => doSave(title, content, wordCount), 3000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -59,8 +68,8 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
   // Manual save (immediate, bypasses debounce)
   const saveNow = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    doSave();
-  }, [doSave]);
+    doSave(title, content, wordCount);
+  }, [doSave, title, content, wordCount]);
 
   return { saveStatus, saveNow };
 }

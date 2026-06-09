@@ -9,7 +9,6 @@ interface AppStore {
 
   // 热点状态
   hotTopics: HotTopic[];
-  selectedTopic: HotTopic | null;
 
   // 版本历史
   articleVersions: ArticleVersion[];
@@ -18,7 +17,6 @@ interface AppStore {
   settings: UserSettings;
 
   // UI状态
-  isLoading: boolean;
   sidebarOpen: boolean;
 
   // Actions
@@ -29,7 +27,6 @@ interface AppStore {
   deleteArticle: (id: string) => void;
 
   setHotTopics: (topics: HotTopic[]) => void;
-  setSelectedTopic: (topic: HotTopic | null) => void;
   toggleFavoriteTopic: (topicId: string) => void;
 
   addArticleVersion: (version: ArticleVersion) => void;
@@ -39,7 +36,6 @@ interface AppStore {
   toggleDarkMode: () => void;
   toggleFollowSystemTheme: () => void;
 
-  setLoading: (loading: boolean) => void;
   toggleSidebar: () => void;
 
   exportData: () => string;
@@ -74,10 +70,8 @@ export const useAppStore = create<AppStore>()(
       articles: [],
       currentArticle: null,
       hotTopics: [],
-      selectedTopic: null,
       articleVersions: [],
       settings: defaultSettings,
-      isLoading: false,
       sidebarOpen: true,
 
       // Actions
@@ -111,7 +105,6 @@ export const useAppStore = create<AppStore>()(
       })),
 
       setHotTopics: (topics) => set({ hotTopics: topics }),
-      setSelectedTopic: (topic) => set({ selectedTopic: topic }),
 
       toggleFavoriteTopic: (topicId) => set((state) => {
         const favs = state.settings.favoriteTopics;
@@ -127,8 +120,10 @@ export const useAppStore = create<AppStore>()(
       }),
 
       addArticleVersion: (version) => set((state) => {
-        const versions = [version, ...state.articleVersions.filter((v) => v.articleId === version.articleId)];
-        return { articleVersions: versions.slice(0, 20) };
+        const otherVersions = state.articleVersions.filter((v) => v.articleId !== version.articleId);
+        const thisVersions = state.articleVersions.filter((v) => v.articleId === version.articleId);
+        const updated = [version, ...thisVersions].slice(0, 20);
+        return { articleVersions: [...otherVersions, ...updated] };
       }),
 
       deleteArticleVersion: (versionId) => set((state) => ({
@@ -141,10 +136,13 @@ export const useAppStore = create<AppStore>()(
 
       toggleDarkMode: () => set((state) => {
         const newDarkMode = !state.settings.darkMode;
-        if (newDarkMode) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
+        // 检查是否在浏览器环境中
+        if (typeof window !== 'undefined') {
+          if (newDarkMode) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
         }
         return {
           settings: { ...state.settings, darkMode: newDarkMode },
@@ -154,23 +152,25 @@ export const useAppStore = create<AppStore>()(
       toggleFollowSystemTheme: () => set((state) => {
         const newFollow = !state.settings.followSystemTheme;
         if (newFollow) {
-          // Immediately apply system preference
-          const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (systemDark) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
+          // 检查是否在浏览器环境中
+          if (typeof window !== 'undefined') {
+            // Immediately apply system preference
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (systemDark) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+            return {
+              settings: { ...state.settings, followSystemTheme: true, darkMode: systemDark },
+            };
           }
-          return {
-            settings: { ...state.settings, followSystemTheme: true, darkMode: systemDark },
-          };
         }
         return {
           settings: { ...state.settings, followSystemTheme: false },
         };
       }),
 
-      setLoading: (loading) => set({ isLoading: loading }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
       exportData: () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
 import { generateArticleStream, generateImage } from '@/services/api';
 import { toast } from 'sonner';
@@ -8,7 +8,7 @@ export function useAIGeneration() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
-  const handleGenerate = async (
+  const handleGenerate = useCallback(async (
     prompt: string,
     wordCount: number,
     onChunk: (chunk: string) => void
@@ -31,7 +31,7 @@ export function useAIGeneration() {
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [settings.ai.apiKey, settings.ai.model, settings.ai.baseUrl]);
 
   const handleGenerateImage = async (imagePrompt: string): Promise<string | null> => {
     if (!imagePrompt.trim()) {

@@ -49,22 +49,32 @@ const getList = async (noCache: boolean) => {
         }
       })
     });
-  const list = result.data.data;
+  const list = result.data?.data;
+  if (!Array.isArray(list)) {
+    return {
+      ...result,
+      data: [],
+    };
+  }
   return {
     ...result,
-    data: list.map((v) => {
+    data: list.reduce((acc: any[], v) => {
       const data = v.target;
-      const questionId = data.url.split("/").pop();
-      return {
-        id: data.id,
-        title: data.title,
-        desc: data.excerpt,
-        cover: v.children[0].thumbnail,
+      if (!data) return acc;
+      const questionId = data.url?.split("/").pop() || data.id;
+      const hotText = v.detail_text || '0';
+      const hotMatch = parseFloat(hotText.split(" ")[0]);
+      acc.push({
+        id: data.id || '',
+        title: data.title || '',
+        desc: data.excerpt || '',
+        cover: v.children?.[0]?.thumbnail || '',
         timestamp: getTime(data.created),
-        hot: parseFloat(v.detail_text.split(" ")[0]) * 10000,
+        hot: isNaN(hotMatch) ? 0 : hotMatch * 10000,
         url: `https://www.zhihu.com/question/${questionId}`,
         mobileUrl: `https://www.zhihu.com/question/${questionId}`,
-      };
-    }),
+      });
+      return acc;
+    }, []),
   };
 };

@@ -1,10 +1,11 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  PenTool, 
-  Image, 
-  Flame, 
-  Settings, 
-  Clock, 
+import {
+  PenTool,
+  Image,
+  Flame,
+  Settings,
+  Clock,
   FileText,
   TrendingUp,
   Sparkles,
@@ -14,10 +15,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/stores/useAppStore';
+import { fetchAllHotTopics } from '@/services/api';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { articles, hotTopics, settings } = useAppStore();
+  const { articles, hotTopics, setHotTopics, settings } = useAppStore();
+
+  useEffect(() => {
+    if (hotTopics.length === 0) {
+      fetchAllHotTopics()
+        .then((topics) => { if (topics.length > 0) setHotTopics(topics); })
+        .catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recentArticles = articles.slice(0, 5);
   const todayTopics = hotTopics.slice(0, 6);
@@ -34,7 +44,7 @@ export function DashboardPage() {
       title: '追热点',
       description: '基于热点生成文章',
       icon: Flame,
-      path: '/',
+      path: '/topics',
       color: 'bg-orange-500',
     },
     {
@@ -128,7 +138,7 @@ export function DashboardPage() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => navigate('/editor')}
+              onClick={() => navigate('/articles')}
             >
               查看全部
               <ArrowRight className="ml-1 h-4 w-4" />
@@ -196,10 +206,10 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">今日热点</CardTitle>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/topics')}
             >
               查看全部
               <ArrowRight className="ml-1 h-4 w-4" />
@@ -210,11 +220,11 @@ export function DashboardPage() {
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Flame className="h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">暂无热点数据</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="mt-4"
-                  onClick={() => navigate('/')}
+                  onClick={() => navigate('/topics')}
                 >
                   查看热点
                 </Button>

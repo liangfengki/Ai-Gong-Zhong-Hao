@@ -22,15 +22,16 @@ interface DyCookieResponse {
   };
 }
 
-// 获取抖音临时 Cookis
+// 获取抖音临时 Cookie
 const getDyCookies = async () => {
   try {
-    const cookisUrl = "https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383";
-    const { data } = await get<DyCookieResponse>({ url: cookisUrl, originaInfo: true });
+    const cookieUrl = "https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383";
+    const { data } = await get<DyCookieResponse>({ url: cookieUrl, originaInfo: true });
     const pattern = /passport_csrf_token=(.*); Path/s;
-    const matchResult = data.headers["set-cookie"][0].match(pattern);
-    const cookieData = matchResult![1];
-    return cookieData;
+    const cookieHeader = data.headers?.["set-cookie"]?.[0];
+    if (!cookieHeader) return undefined;
+    const matchResult = cookieHeader.match(pattern);
+    return matchResult?.[1];
   } catch (error) {
     console.error("获取抖音 Cookie 出错" + error);
     return undefined;
@@ -61,14 +62,20 @@ const getList = async (noCache: boolean) => {
       Cookie: `passport_csrf_token=${cookie}`,
     },
   });
-  const list = result.data.data.word_list;
+  const list = result.data?.data?.word_list;
+  if (!Array.isArray(list)) {
+    return {
+      ...result,
+      data: [],
+    };
+  }
   return {
     ...result,
     data: list.map((v) => ({
-      id: v.sentence_id,
-      title: v.word,
+      id: v.sentence_id || '',
+      title: v.word || '',
       timestamp: getTime(v.event_time),
-      hot: v.hot_value,
+      hot: v.hot_value || 0,
       url: `https://www.douyin.com/hot/${v.sentence_id}`,
       mobileUrl: `https://www.douyin.com/hot/${v.sentence_id}`,
     })),

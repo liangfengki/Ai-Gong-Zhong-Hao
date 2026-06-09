@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -45,7 +46,7 @@ const sourceNames: Record<string, string> = {
 
 export function HotTopicsPage() {
   const navigate = useNavigate();
-  const { hotTopics, setHotTopics, setSelectedTopic, settings, toggleFavoriteTopic } = useAppStore();
+  const { hotTopics, setHotTopics, settings, toggleFavoriteTopic } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
@@ -64,6 +65,7 @@ export function HotTopicsPage() {
       setHotTopics(topics);
     } catch (error) {
       console.error('加载热点失败:', error);
+      toast.error('加载热点失败', { description: '请检查网络连接后重试' });
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,6 @@ export function HotTopicsPage() {
   };
 
   const doNavigate = (topic: HotTopic) => {
-    setSelectedTopic(topic);
     navigate('/editor', { state: { topic } });
   };
 

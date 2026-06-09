@@ -116,7 +116,7 @@ const PROVIDER_PRESETS: AIProviderPreset[] = [
   },
 ];
 
-const skillIcons: Record<string, any> = {
+const skillIcons: Record<string, typeof Sparkles> = {
   'remove-ai-style': Sparkles,
   'news-summary': Newspaper,
   'blog-monitor': Rss,
@@ -425,7 +425,7 @@ export function SettingsPage() {
                     max="32000"
                     value={settings.ai.maxTokens}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       updateAI({ maxTokens: isNaN(val) ? 2000 : val });
                     }}
                   />
@@ -439,7 +439,7 @@ export function SettingsPage() {
                     max="10000"
                     value={settings.defaultWordCount}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       updateSettings({ defaultWordCount: isNaN(val) ? 1500 : val });
                     }}
                   />

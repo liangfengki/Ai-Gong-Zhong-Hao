@@ -51,6 +51,14 @@ export interface RichTextEditorHandle {
   appendContent: (html: string) => void;
 }
 
+type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
+type EditorViewLike = {
+  dom: HTMLElement;
+  destroy: () => void;
+  mounted?: boolean;
+  __reactSafeDestroyPatched?: boolean;
+};
+
 interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -76,14 +84,17 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   const [uploading, setUploading] = useState(0);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const isInternalChange = useRef(false);
-  const initialContentRef = useRef(content);
+  const [initialContent] = useState(() => content);
   const isMounted = useRef(true);
+  const tiptapEditorRef = useRef<TiptapEditor | null>(null);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: false,
         undoRedo: false, // 禁用内置 undoRedo，使用独立 History 扩展配置深度
+        link: false,
+        underline: false,
       }),
       History.configure({
         depth: 100,
@@ -115,7 +126,36 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       TextStyle,
       Color,
     ],
-    content: initialContentRef.current,
+    content: initialContent,
+    onCreate: ({ editor }) => {
+      tiptapEditorRef.current = editor;
+      const view = editor.view as unknown as EditorViewLike;
+      if (view.__reactSafeDestroyPatched) return;
+      view.__reactSafeDestroyPatched = true;
+      const originalDestroy = view.destroy.bind(view);
+      view.destroy = () => {
+        try {
+          view.mounted = false;
+        } catch {
+        }
+        const dom = view.dom;
+        const parent = dom.parentNode as (Node & { removeChild: (child: Node) => Node }) | null;
+        if (!parent) {
+          originalDestroy();
+          return;
+        }
+        const originalRemoveChild = parent.removeChild.bind(parent);
+        try {
+          parent.removeChild = (() => dom) as unknown as typeof parent.removeChild;
+          originalDestroy();
+        } finally {
+          parent.removeChild = originalRemoveChild;
+        }
+      };
+    },
+    onDestroy: () => {
+      tiptapEditorRef.current = null;
+    },
     onUpdate: ({ editor }) => {
       isInternalChange.current = true;
       onChange(editor.getHTML());

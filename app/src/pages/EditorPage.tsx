@@ -42,66 +42,91 @@ import { useArticleActions } from '@/hooks/useArticleActions';
 import { useAIGeneration } from '@/hooks/useAIGeneration';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import type { HotTopic, ArticleVersion } from '@/types';
+import type { HotTopic, ArticleVersion, Article } from '@/types';
 
 export function EditorPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { settings, currentArticle, loadArticle, addArticleVersion } = useAppStore();
+  const { settings, currentArticle, setCurrentArticle, loadArticle, addArticleVersion } = useAppStore();
   const editorRef = useRef<RichTextEditorHandle>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const titleRef = useRef<string>('');
+  const onGenerateRef = useRef<(() => Promise<void>) | null>(null);
 
   const topic = location.state?.topic as HotTopic | undefined;
   const routeArticleId = location.state?.articleId as string | undefined;
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [wordCount, setWordCount] = useState(settings.defaultWordCount);
+  const [wordCount, setWordCount] = useState(settings.defaultWordCount || 1500);
   const [imagePrompt, setImagePrompt] = useState('');
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
-  const [articleId, setArticleId] = useState<string | undefined>(undefined);
   const [activeSideTab, setActiveSideTab] = useState<string>('ai');
 
   const { saveStatus, saveNow } = useAutoSave(title, content, wordCount);
-  const { handleCopy, handleCopyForWechat } = useArticleActions(title, content, topic);
+  const { handleCopy, handleCopyForWechat } = useArticleActions(title, content);
   const { isGenerating, isGeneratingImage, handleGenerate, handleGenerateImage } = useAIGeneration();
 
   // 统一初始化：currentArticle 为唯一数据源，localStorage 仅为首次加载 fallback
   const initKey = routeArticleId || currentArticle?.id || 'new';
   const prevInitKey = useRef<string>('');
+  // topic 初始化单独追踪，因为 topic 分支会调用 setCurrentArticle 导致 initKey 变化
+  const topicInitRef = useRef<string>('');
 
   useEffect(() => {
-    if (prevInitKey.current === initKey) return;
-    prevInitKey.current = initKey;
-
     // 取消前一个加载
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
     if (topic) {
-      const id = uuidv4();
-      setArticleId(id);
-      setTitle(`关于"${topic.title}"的公众号文章`);
+      // topic 分支：用 topic 标题做 guard，避免 setCurrentArticle 导致 initKey 变化后重复执行
+      if (topicInitRef.current === topic.title) return;
+      topicInitRef.current = topic.title;
+      setContent('');
+      const newArticle: Article = {
+        id: uuidv4(),
+        title: `关于"${topic.title}"的公众号文章`,
+        content: '',
+        wordCount,
+        tags: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'draft',
+      };
+      setCurrentArticle(newArticle);
+      setTitle(newArticle.title);
       setAdditionalPrompt(`请围绕热点话题"${topic.title}"写一篇公众号文章`);
-    } else if (routeArticleId) {
-      // 通过 store 加载，而非直接读 location.state.article
-      const found = loadArticle(routeArticleId);
-      if (!controller.signal.aborted && found) {
-        setArticleId(found.id);
-        setTitle(found.title);
-        setContent(found.content);
-        setWordCount(found.wordCount);
-      }
-    } else if (currentArticle) {
-      // currentArticle 来自 store（已持久化到 localStorage），作为唯一数据源
-      setArticleId(currentArticle.id);
-      setTitle(currentArticle.title);
-      setContent(currentArticle.content);
-      setWordCount(currentArticle.wordCount);
     } else {
-      setArticleId(uuidv4());
+      // 非 topic 分支：用 initKey 做 guard
+      if (prevInitKey.current === initKey) return;
+      prevInitKey.current = initKey;
+
+      if (routeArticleId) {
+        const found = loadArticle(routeArticleId);
+        if (!controller.signal.aborted && found) {
+          setTitle(found.title);
+          setContent(found.content);
+          setWordCount(found.wordCount);
+        }
+      } else if (currentArticle) {
+        setTitle(currentArticle.title);
+        setContent(currentArticle.content);
+        setWordCount(currentArticle.wordCount);
+      } else {
+        const newArticle: Article = {
+          id: uuidv4(),
+          title: '',
+          content: '',
+          wordCount,
+          tags: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: 'draft',
+        };
+        setCurrentArticle(newArticle);
+      }
     }
 
     return () => controller.abort();
@@ -110,18 +135,21 @@ export function EditorPage() {
   const handleSaveWithVersionCallback = useCallback(() => {
     saveNow();
     toast.success('保存成功', { description: '文章已保存到本地' });
-    if (articleId && content) {
+    // Read latest values from store and editor ref to avoid stale closures
+    const storeArticleId = useAppStore.getState().currentArticle?.id;
+    const latestContent = editorRef.current?.getEditor()?.getHTML() || '';
+    if (storeArticleId && latestContent) {
       const version: ArticleVersion = {
         id: uuidv4(),
-        articleId,
-        title,
-        content,
-        wordCount: content.replace(/<[^>]*>/g, '').length,
+        articleId: storeArticleId,
+        title: titleRef.current,
+        content: latestContent,
+        wordCount: latestContent.replace(/<[^>]*>/g, '').length,
         createdAt: new Date().toISOString(),
       };
       addArticleVersion(version);
     }
-  }, [saveNow, articleId, title, content, addArticleVersion]);
+  }, [saveNow, addArticleVersion]);
 
   // 全局快捷键
   useEffect(() => {
@@ -132,16 +160,20 @@ export function EditorPage() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (!isGenerating) onGenerate();
+        if (!isGenerating) onGenerateRef.current?.();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleSaveWithVersionCallback, isGenerating]);
 
-  const onGenerate = async () => {
-    // 保存内容快照，失败时恢复
-    const previousContent = content;
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
+
+  onGenerateRef.current = async () => {
+    // 保存内容快照，失败时恢复（从编辑器实时读取，不依赖闭包）
+    const previousContent = editorRef.current?.getEditor()?.getHTML() || content;
     // 清空编辑器准备接收流式内容
     setContent('');
     const prompt = `
@@ -155,40 +187,99 @@ export function EditorPage() {
     `;
     try {
       await handleGenerate(prompt, wordCount, (chunk) => {
-        // 使用 appendContent 追加到编辑器末尾，不重置光标
         if (editorRef.current) {
           editorRef.current.appendContent(chunk);
         } else {
-          // fallback: 如果 ref 不可用，走 state
           setContent((prev) => prev + chunk);
         }
       });
-    } catch {
-      // 失败时恢复之前的内容
+    } catch (error) {
       setContent(previousContent);
+      const errorMessage = error instanceof Error ? error.message : 'AI 生成失败，请稍后重试';
+      toast.error('生成失败', { description: errorMessage });
     }
   };
+  const onGenerate = useCallback(() => onGenerateRef.current?.(), []);
+
+  // 基于现有内容进行 AI 改写（去AI味、生成摘要等）
+  const onRefineContent = useCallback(async (instruction: string) => {
+    const currentContent = editorRef.current?.getEditor()?.getHTML() || content;
+    if (!currentContent.trim()) {
+      toast.error('请先写点内容');
+      return;
+    }
+    const previousContent = currentContent;
+    setContent('');
+    const prompt = `
+      以下是原文内容：
+      ${currentContent.replace(/<[^>]*>/g, '\n')}
+
+      请根据以下要求处理上述内容：
+      ${instruction}
+
+      要求：
+      1. 直接输出处理后的内容，不要加任何说明
+      2. 适合公众号阅读的风格
+      3. 保持原文的核心观点和信息
+    `;
+    try {
+      await handleGenerate(prompt, wordCount, (chunk) => {
+        if (editorRef.current) {
+          editorRef.current.appendContent(chunk);
+        } else {
+          setContent((prev) => prev + chunk);
+        }
+      });
+    } catch (error) {
+      setContent(previousContent);
+      const errorMessage = error instanceof Error ? error.message : 'AI 处理失败，请稍后重试';
+      toast.error('处理失败', { description: errorMessage });
+    }
+  }, [wordCount, handleGenerate]);
 
   const onGenerateImage = async () => {
-    const imageUrl = await handleGenerateImage(imagePrompt);
-    if (imageUrl) {
-      // 通过 TipTap 命令链插入图片，支持撤销
-      const editor = editorRef.current?.getEditor();
-      if (editor) {
-        editor.chain().focus().setImage({ src: imageUrl, alt: imagePrompt }).run();
-        // 同步到 React state
-        setContent(editor.getHTML());
-      } else {
-        // fallback
-        const imageHtml = `<p><img src="${imageUrl}" alt="${imagePrompt}" style="max-width: 100%; height: auto;" /></p>`;
-        setContent((prev) => prev + imageHtml);
+    try {
+      const imageUrl = await handleGenerateImage(imagePrompt);
+      if (imageUrl) {
+        // 通过 TipTap 命令链插入图片，支持撤销
+        const editor = editorRef.current?.getEditor();
+        if (editor) {
+          editor.chain().focus().setImage({ src: imageUrl, alt: imagePrompt }).run();
+          // 同步到 React state
+          setContent(editor.getHTML());
+        } else {
+          // fallback: 使用 DOM API 安全创建图片元素
+          const sanitizedUrl = encodeURI(imageUrl);
+          const sanitizedAlt = imagePrompt.replace(/[<>"'&]/g, (char) => {
+            const entities: Record<string, string> = {
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#x27;',
+              '&': '&amp;',
+            };
+            return entities[char] || char;
+          });
+          const imageHtml = `<p><img src="${sanitizedUrl}" alt="${sanitizedAlt}" style="max-width: 100%; height: auto;" /></p>`;
+          setContent((prev) => prev + imageHtml);
+        }
+        setShowImageDialog(false);
       }
-      setShowImageDialog(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '图片生成失败，请稍后重试';
+      toast.error('图片生成失败', { description: errorMessage });
     }
   };
 
   const handleInsertTemplate = (templateContent: string) => {
-    setContent((prev) => prev + `<p>${templateContent.replace(/\n/g, '<br/>')}</p>`);
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      const html = `<p>${templateContent.replace(/\n/g, '<br/>')}</p>`;
+      editor.chain().focus().insertContent(html).run();
+      setContent(editor.getHTML());
+    } else {
+      setContent((prev) => prev + `<p>${templateContent.replace(/\n/g, '<br/>')}</p>`);
+    }
   };
 
   const handleRestoreVersion = (version: ArticleVersion) => {
@@ -202,42 +293,78 @@ export function EditorPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)]">
       {/* ========== 顶部栏 ========== */}
-      <div className="flex items-center justify-between px-4 py-2 bg-card border-b rounded-t-lg">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
+      <div className="flex items-center justify-between px-6 py-3 bg-card/80 backdrop-blur-sm border-b">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => navigate(-1)} 
+            className="h-9 w-9 rounded-lg hover:bg-muted transition-colors"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Separator orientation="vertical" className="h-5" />
-          <div className="relative w-80">
+          <Separator orientation="vertical" className="h-6" />
+          <div className="relative flex-1 min-w-[300px] max-w-[500px]">
             <Input
               placeholder="输入文章标题..."
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              maxLength={50}
-              className="text-base font-medium border-none shadow-none focus-visible:ring-0 px-0 pr-12"
+              maxLength={30}
+              className="text-lg font-semibold border-none shadow-none focus-visible:ring-0 px-0 pr-14 bg-transparent placeholder:text-muted-foreground/50"
             />
-            <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-xs tabular-nums ${
-              title.length > 30 ? 'text-red-500' : title.length >= 25 ? 'text-amber-500' : 'text-muted-foreground'
-            }`}>
-              {title.length}/30
-            </span>
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <span className={`text-xs tabular-nums px-2 py-1 rounded-md ${
+                title.length > 30 
+                  ? 'text-red-500 bg-red-50 dark:bg-red-950/30' 
+                  : title.length >= 25 
+                    ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' 
+                    : 'text-muted-foreground bg-muted/50'
+              }`}>
+                {title.length}/30
+              </span>
+            </div>
           </div>
           <Badge
             variant={saveStatus === 'saved' ? 'default' : saveStatus === 'saving' ? 'outline' : 'secondary'}
-            className={`text-xs ${saveStatus === 'unsaved' ? 'text-amber-600 dark:text-amber-400' : ''}`}
+            className={`text-xs px-3 py-1 transition-all duration-300 ${
+              saveStatus === 'saved' 
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' 
+                : saveStatus === 'saving' 
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
+                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+            }`}
           >
-            {saveStatus === 'saving' ? '保存中...' : saveStatus === 'unsaved' ? '未保存' : '已保存'}
+            {saveStatus === 'saving' ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                保存中...
+              </span>
+            ) : saveStatus === 'unsaved' ? '未保存' : '已保存'}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={handleSaveWithVersionCallback}>
-            <Save className="mr-1.5 h-3.5 w-3.5" /> 保存
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleSaveWithVersionCallback}
+            className="h-9 px-3 rounded-lg hover:bg-muted transition-colors"
+          >
+            <Save className="mr-1.5 h-4 w-4" /> 保存
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopy}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" /> 复制
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleCopy}
+            className="h-9 px-3 rounded-lg hover:bg-muted transition-colors"
+          >
+            <Copy className="mr-1.5 h-4 w-4" /> 复制
           </Button>
-          <Button size="sm" onClick={handleCopyForWechat} className="bg-green-600 hover:bg-green-700">
-            <Download className="mr-1.5 h-3.5 w-3.5" /> 复制到公众号
+          <Button 
+            size="sm" 
+            onClick={handleCopyForWechat} 
+            className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all duration-200 hover:shadow-md hover:shadow-emerald-600/30"
+          >
+            <Download className="mr-1.5 h-4 w-4" /> 复制到公众号
           </Button>
         </div>
       </div>
@@ -256,52 +383,81 @@ export function EditorPage() {
             />
           </div>
           {/* 底部状态栏 */}
-          <div className="flex items-center justify-between px-4 py-1.5 text-xs text-muted-foreground border-t bg-muted/30">
-            <div className="flex items-center gap-4">
-              <span className="tabular-nums">{charCount.toLocaleString()} 字</span>
-              <span className="opacity-40">·</span>
-              <span>阅读 {Math.max(1, Math.ceil(charCount / 500))} 分钟</span>
-              <span className="opacity-40">·</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-20 h-1.5 rounded-full bg-muted-foreground/20 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-2 text-xs text-muted-foreground border-t bg-muted/20 backdrop-blur-sm">
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-2">
+                <span className="tabular-nums font-medium">{charCount.toLocaleString()}</span>
+                <span>字</span>
+              </div>
+              <div className="w-px h-3 bg-border/50" />
+              <div className="flex items-center gap-2">
+                <span>阅读</span>
+                <span className="tabular-nums font-medium">{Math.max(1, Math.ceil(charCount / 500))}</span>
+                <span>分钟</span>
+              </div>
+              <div className="w-px h-3 bg-border/50" />
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 rounded-full bg-muted-foreground/10 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      charCount >= 3000 ? 'bg-green-500' : charCount >= 1500 ? 'bg-blue-500' : 'bg-muted-foreground/40'
+                    className={`h-full rounded-full transition-all duration-500 ease-out ${
+                      charCount >= 3000 
+                        ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' 
+                        : charCount >= 1500 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-400' 
+                          : 'bg-gradient-to-r from-muted-foreground/30 to-muted-foreground/20'
                     }`}
                     style={{ width: `${Math.min(100, (charCount / 3000) * 100)}%` }}
                   />
                 </div>
-                <span className="tabular-nums">{Math.round((charCount / 3000) * 100)}%</span>
+                <span className="tabular-nums font-medium min-w-[2.5rem] text-right">
+                  {Math.round((charCount / 3000) * 100)}%
+                </span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1 py-0.5 rounded text-[10px] bg-muted">Ctrl+S</kbd>
-              <span>保存</span>
-              <kbd className="px-1 py-0.5 rounded text-[10px] bg-muted">Ctrl+Enter</kbd>
-              <span>生成</span>
-              <kbd className="px-1 py-0.5 rounded text-[10px] bg-muted">Ctrl+B</kbd>
-              <span>加粗</span>
-              <kbd className="px-1 py-0.5 rounded text-[10px] bg-muted">Ctrl+I</kbd>
-              <span>斜体</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50">
+                <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-background border border-border/50 font-mono">⌘S</kbd>
+                <span>保存</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50">
+                <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-background border border-border/50 font-mono">⌘↵</kbd>
+                <span>生成</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* ===== 右侧面板 ===== */}
-        <div className="w-80 border-l bg-card overflow-y-auto">
+        <div className="w-80 border-l bg-card/50 backdrop-blur-sm overflow-y-auto">
           <Tabs value={activeSideTab} onValueChange={setActiveSideTab} className="w-full">
-            <TabsList className="w-full grid grid-cols-4 h-10 rounded-none border-b bg-transparent">
-              <TabsTrigger value="ai" className="text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
-                <Sparkles className="h-3.5 w-3.5" />
+            <TabsList className="w-full grid grid-cols-4 h-12 rounded-none border-b bg-transparent p-1">
+              <TabsTrigger 
+                value="ai" 
+                className="flex flex-col items-center gap-1 text-[10px] rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all duration-200"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>AI 写作</span>
               </TabsTrigger>
-              <TabsTrigger value="tools" className="text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
-                <Zap className="h-3.5 w-3.5" />
+              <TabsTrigger 
+                value="tools" 
+                className="flex flex-col items-center gap-1 text-[10px] rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all duration-200"
+              >
+                <Zap className="h-4 w-4" />
+                <span>工具</span>
               </TabsTrigger>
-              <TabsTrigger value="format" className="text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
-                <Palette className="h-3.5 w-3.5" />
+              <TabsTrigger 
+                value="format" 
+                className="flex flex-col items-center gap-1 text-[10px] rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all duration-200"
+              >
+                <Palette className="h-4 w-4" />
+                <span>排版</span>
               </TabsTrigger>
-              <TabsTrigger value="analysis" className="text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
-                <BarChart3 className="h-3.5 w-3.5" />
+              <TabsTrigger 
+                value="analysis" 
+                className="flex flex-col items-center gap-1 text-[10px] rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all duration-200"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>分析</span>
               </TabsTrigger>
             </TabsList>
 
@@ -385,14 +541,7 @@ export function EditorPage() {
                     variant="outline"
                     size="sm"
                     className="text-xs justify-start"
-                    onClick={() => {
-                      if (content) {
-                        setAdditionalPrompt('请优化以下文章，去除AI痕迹，使其更自然');
-                        onGenerate();
-                      } else {
-                        toast.error('请先写点内容');
-                      }
-                    }}
+                    onClick={() => onRefineContent('优化以下文章，去除AI痕迹，使其读起来更自然、更有人味，像真人写的一样')}
                   >
                     <Sparkles className="mr-1 h-3 w-3" /> 去AI味
                   </Button>
@@ -400,14 +549,7 @@ export function EditorPage() {
                     variant="outline"
                     size="sm"
                     className="text-xs justify-start"
-                    onClick={() => {
-                      if (content) {
-                        setAdditionalPrompt('请为以下文章生成一个简洁的摘要，100字以内');
-                        onGenerate();
-                      } else {
-                        toast.error('请先写点内容');
-                      }
-                    }}
+                    onClick={() => onRefineContent('为以下文章生成一个简洁的摘要，100字以内，突出核心观点')}
                   >
                     <AlignLeft className="mr-1 h-3 w-3" /> 生成摘要
                   </Button>
@@ -427,7 +569,7 @@ export function EditorPage() {
             {/* ---- 工具 ---- */}
             <TabsContent value="tools" className="p-3 space-y-3 mt-0">
               <PhonePreview title={title} content={content} />
-              <VersionHistory articleId={articleId} onRestore={handleRestoreVersion} />
+              <VersionHistory articleId={currentArticle?.id} onRestore={handleRestoreVersion} />
               <ExportDialog title={title} content={content} />
             </TabsContent>
 

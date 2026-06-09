@@ -1,13 +1,14 @@
-/* 微信公众号编辑器风格 - 优化版 */
+/* 现代公众号编辑器 - 专业版 */
 
 .wechat-editor {
   border: none;
   border-radius: 0;
-  background: #fff;
+  background: hsl(var(--editor-content-bg));
   position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
+  transition: background-color var(--transition-normal);
 }
 
 /* 拖拽上传遮罩 */
@@ -15,14 +16,20 @@
   position: absolute;
   inset: 0;
   z-index: 50;
-  background: rgba(7, 193, 96, 0.08);
-  border: 2px dashed #07c160;
-  border-radius: 8px;
+  background: hsl(var(--editor-accent) / 0.08);
+  border: 2px dashed hsl(var(--editor-accent));
+  border-radius: var(--border-radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
+  animation: drop-pulse 2s infinite;
+}
+
+@keyframes drop-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
 }
 
 .editor-drop-content {
@@ -30,7 +37,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: #07c160;
+  color: hsl(var(--editor-accent));
   font-size: 14px;
   font-weight: 500;
 }
@@ -41,73 +48,139 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #f0fdf4;
-  border-bottom: 1px solid #e5e7eb;
-  color: #07c160;
+  background: hsl(var(--editor-accent-light));
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--editor-accent));
   font-size: 13px;
+  animation: slideDown 0.3s ease-out;
 }
 
-/* 工具栏 */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 工具栏 - 毛玻璃效果 */
 .wechat-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1px;
-  padding: 6px 12px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fafafa;
+  gap: 2px;
+  padding: 8px 16px;
+  border-bottom: 1px solid hsl(var(--editor-toolbar-border));
+  background: hsl(var(--editor-toolbar-bg) / 0.8);
+  backdrop-filter: blur(12px) saturate(180%);
   position: sticky;
   top: 0;
   z-index: 10;
+  transition: all var(--transition-normal);
+}
+
+.wechat-toolbar:hover {
+  background: hsl(var(--editor-toolbar-bg) / 0.95);
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.toolbar-group:hover {
+  background: hsl(var(--muted) / 0.5);
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 18px;
-  background: #e5e7eb;
-  margin: 0 6px;
+  height: 20px;
+  background: hsl(var(--border));
+  margin: 0 8px;
+  opacity: 0.6;
 }
 
 /* 工具栏按钮 */
 .wechat-toolbar button {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  color: #555;
-  transition: all 0.15s;
-  font-size: 13px;
+  border-radius: var(--border-radius-sm);
+  color: hsl(var(--muted-foreground));
+  transition: all var(--transition-fast);
+  font-size: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.wechat-toolbar button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--editor-accent));
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  border-radius: inherit;
 }
 
 .wechat-toolbar button:hover {
-  background: #e8e8e8;
-  color: #333;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+  transform: translateY(-1px);
+}
+
+.wechat-toolbar button:hover::before {
+  opacity: 0.05;
+}
+
+.wechat-toolbar button:active {
+  transform: translateY(0);
+  transition: transform 50ms;
 }
 
 .wechat-toolbar button.active {
-  background: #07c160;
-  color: #fff;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--editor-accent));
+  box-shadow: 0 2px 8px hsl(var(--editor-accent) / 0.3);
+}
+
+.wechat-toolbar button.active::before {
+  opacity: 0;
+}
+
+.wechat-toolbar button.active:hover {
+  background: hsl(var(--editor-accent-dark));
+  box-shadow: 0 4px 12px hsl(var(--editor-accent) / 0.4);
 }
 
 .wechat-toolbar button:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
+}
+
+.wechat-toolbar button:disabled:hover {
+  background: transparent;
+  transform: none;
 }
 
 /* 编辑器内容区 */
 .wechat-content {
   flex: 1;
-  padding: 32px 48px;
+  padding: var(--editor-padding) 48px;
   overflow-y: auto;
+  background: hsl(var(--editor-content-bg));
+  transition: background-color var(--transition-normal);
 }
 
 .wechat-content .ProseMirror {
@@ -116,154 +189,228 @@
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
   font-size: 15px;
   line-height: 1.8;
-  color: #333;
-  max-width: 680px;
+  color: hsl(var(--foreground));
+  max-width: var(--editor-max-width);
   margin: 0 auto;
+  padding: 24px;
+  background: hsl(var(--card));
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid hsl(var(--border) / 0.5);
+  transition: all var(--transition-normal);
+}
+
+.wechat-content .ProseMirror:focus {
+  box-shadow: var(--shadow-md);
+  border-color: hsl(var(--editor-accent) / 0.3);
 }
 
 /* 段落 */
 .wechat-content .ProseMirror p {
   margin: 0 0 16px 0;
   text-align: justify;
+  transition: color var(--transition-fast);
 }
 
 /* 标题 */
 .wechat-content .ProseMirror h1 {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  color: #111;
+  color: hsl(var(--foreground));
   margin: 32px 0 16px 0;
   line-height: 1.4;
   text-align: center;
+  letter-spacing: -0.02em;
 }
 
 .wechat-content .ProseMirror h2 {
   font-size: 18px;
-  font-weight: 700;
-  color: #111;
+  font-weight: 600;
+  color: hsl(var(--foreground));
   margin: 28px 0 12px 0;
   line-height: 1.4;
-  border-left: 3px solid #07c160;
-  padding-left: 10px;
+  border-left: 3px solid hsl(var(--editor-accent));
+  padding-left: 12px;
+  position: relative;
+}
+
+.wechat-content .ProseMirror h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(to bottom, hsl(var(--editor-accent)), hsl(var(--editor-accent) / 0.3));
+  border-radius: 2px;
 }
 
 /* 加粗 */
 .wechat-content .ProseMirror strong {
-  font-weight: 700;
-  color: #111;
+  font-weight: 600;
+  color: hsl(var(--foreground));
 }
 
 /* 斜体 */
 .wechat-content .ProseMirror em {
   font-style: italic;
-  color: #555;
+  color: hsl(var(--muted-foreground));
 }
 
 /* 下划线 */
 .wechat-content .ProseMirror u {
   text-decoration: underline;
   text-underline-offset: 3px;
+  text-decoration-color: hsl(var(--editor-accent) / 0.4);
 }
 
 /* 删除线 */
 .wechat-content .ProseMirror s {
   text-decoration: line-through;
-  color: #999;
+  color: hsl(var(--muted-foreground) / 0.7);
 }
 
 /* 高亮 */
 .wechat-content .ProseMirror mark {
-  background-color: #fef3c7;
-  padding: 1px 4px;
-  border-radius: 2px;
+  background-color: hsl(var(--editor-warning) / 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: hsl(var(--foreground));
 }
 
 /* 链接 */
 .wechat-content .ProseMirror a {
-  color: #576b95;
+  color: hsl(var(--editor-accent));
   text-decoration: none;
-  border-bottom: 1px solid rgba(87, 107, 149, 0.3);
+  border-bottom: 1px solid hsl(var(--editor-accent) / 0.3);
+  transition: all var(--transition-fast);
 }
 
 .wechat-content .ProseMirror a:hover {
-  border-bottom-color: #576b95;
+  border-bottom-color: hsl(var(--editor-accent));
+  color: hsl(var(--editor-accent-dark));
 }
 
 /* 图片 */
 .wechat-content .ProseMirror img {
   max-width: 100%;
   height: auto;
-  margin: 16px 0;
-  border-radius: 4px;
+  margin: 20px 0;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+}
+
+.wechat-content .ProseMirror img:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 /* 分割线 */
 .wechat-content .ProseMirror hr {
   border: none;
-  border-top: 1px solid #e5e7eb;
-  margin: 24px 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, hsl(var(--border)), transparent);
+  margin: 28px 0;
 }
 
 /* 引用 */
 .wechat-content .ProseMirror blockquote {
-  border-left: 3px solid #07c160;
-  padding: 12px 16px;
-  margin: 16px 0;
-  color: #666;
-  background: #f9fafb;
-  border-radius: 0 4px 4px 0;
+  border-left: 3px solid hsl(var(--editor-accent));
+  padding: 16px 20px;
+  margin: 20px 0;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--editor-accent-light) / 0.3);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
   font-size: 14px;
+  position: relative;
+}
+
+.wechat-content .ProseMirror blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  font-size: 48px;
+  color: hsl(var(--editor-accent) / 0.2);
+  font-family: serif;
+  line-height: 1;
 }
 
 /* 列表 */
 .wechat-content .ProseMirror ul,
 .wechat-content .ProseMirror ol {
   padding-left: 24px;
-  margin: 8px 0;
+  margin: 12px 0;
 }
 
 .wechat-content .ProseMirror li {
-  margin: 4px 0;
+  margin: 6px 0;
   line-height: 1.8;
 }
 
 .wechat-content .ProseMirror ul li {
-  list-style-type: disc;
+  list-style-type: none;
+  position: relative;
+}
+
+.wechat-content .ProseMirror ul li::before {
+  content: '•';
+  position: absolute;
+  left: -16px;
+  color: hsl(var(--editor-accent));
+  font-weight: bold;
 }
 
 .wechat-content .ProseMirror ol li {
   list-style-type: decimal;
+  color: hsl(var(--muted-foreground));
+}
+
+.wechat-content .ProseMirror ol li::marker {
+  color: hsl(var(--editor-accent));
+  font-weight: 500;
 }
 
 /* 代码（行内） */
 .wechat-content .ProseMirror code {
-  background: #f3f4f6;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: Menlo, Monaco, "Courier New", monospace;
+  background: hsl(var(--muted) / 0.8);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, "Courier New", monospace;
   font-size: 13px;
-  color: #e11d48;
+  color: hsl(var(--editor-accent));
+  border: 1px solid hsl(var(--border) / 0.5);
 }
 
 /* 占位符 */
 .wechat-content .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: #9ca3af;
+  color: hsl(var(--muted-foreground) / 0.5);
   pointer-events: none;
   height: 0;
   font-size: 15px;
+  font-style: italic;
 }
 
 /* 选中样式 */
 .wechat-content .ProseMirror ::selection {
-  background: #bfdbfe;
+  background: hsl(var(--editor-accent) / 0.2);
+}
+
+/* 焦点样式 */
+.wechat-content .ProseMirror:focus-visible {
+  outline: 2px solid hsl(var(--editor-accent) / 0.3);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-md);
 }
 
 /* 响应式 */
 @media (max-width: 768px) {
   .wechat-toolbar {
-    padding: 4px 8px;
+    padding: 6px 12px;
+    gap: 1px;
   }
   
   .wechat-toolbar button {
@@ -272,16 +419,44 @@
   }
   
   .toolbar-divider {
-    margin: 0 3px;
+    margin: 0 4px;
+    height: 16px;
   }
   
   .wechat-content .ProseMirror {
     font-size: 14px;
     min-height: 250px;
+    padding: 16px;
+    border-radius: var(--border-radius-md);
   }
   
   .wechat-content {
     padding: 16px;
     min-height: 250px;
+  }
+}
+
+@media (max-width: 480px) {
+  .wechat-toolbar {
+    padding: 4px 8px;
+    justify-content: center;
+  }
+  
+  .toolbar-group {
+    gap: 1px;
+  }
+  
+  .wechat-toolbar button {
+    width: 26px;
+    height: 26px;
+  }
+  
+  .wechat-content .ProseMirror {
+    font-size: 13px;
+    padding: 12px;
+  }
+  
+  .wechat-content {
+    padding: 12px;
   }
 }

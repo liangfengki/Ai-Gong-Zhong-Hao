@@ -16,6 +16,7 @@ import {
   DialogTrigger 
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { SafeHtml } from '@/components/ui/safe-html';
 import { styleTemplates, type StyleTemplate } from '@/lib/styleTemplates';
 import { applyStyleToContent } from '@/lib/formatUtils';
 import { OneClickFormat } from './OneClickFormat';
@@ -219,9 +220,9 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
                 <DialogHeader>
                   <DialogTitle>公众号预览</DialogTitle>
                 </DialogHeader>
-                <div 
+                <SafeHtml
+                  html={previewHtml}
                   className="border rounded-lg p-4 max-h-[60vh] overflow-y-auto"
-                  dangerouslySetInnerHTML={{ __html: previewHtml }}
                 />
               </DialogContent>
             </Dialog>

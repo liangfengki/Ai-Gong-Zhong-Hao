@@ -32,14 +32,12 @@ const sourceColors: Record<string, string> = {
   unsplash: 'bg-black',
   pexels: 'bg-green-600',
   pixabay: 'bg-yellow-500',
-  picsum: 'bg-blue-500',
 };
 
 const sourceNames: Record<string, string> = {
   unsplash: 'Unsplash',
   pexels: 'Pexels',
   pixabay: 'Pixabay',
-  picsum: '免费图库',
 };
 
 // 预设关键词
@@ -216,7 +214,6 @@ export function ImageLibraryPage() {
         <Badge className={`${sourceColors.unsplash} text-white`}>Unsplash</Badge>
         <Badge className={`${sourceColors.pexels} text-white`}>Pexels</Badge>
         <Badge className={`${sourceColors.pixabay} text-white`}>Pixabay</Badge>
-        <Badge className={`${sourceColors.picsum} text-white`}>免费图库</Badge>
       </div>
 
       {/* Images Grid */}

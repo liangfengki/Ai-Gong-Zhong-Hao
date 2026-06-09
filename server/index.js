@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 
@@ -13,18 +14,53 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 6356;
 
-// ============ 中间件 ============
+// ============ 安全中间件 ============
 
-app.use(cors());
+// 安全头
+app.use(helmet({
+  contentSecurityPolicy: false, // 开发环境禁用CSP
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS配置 - 生产环境严格限制
+const corsOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? corsOrigins : true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-base-url', 'x-model'],
+  maxAge: 86400,
+  credentials: true,
+}));
+
+// 请求体大小限制
 app.use(express.json({ limit: '1mb' }));
 
-// 请求日志
+// 请求ID和日志
 app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || Math.random().toString(36).substring(2, 15);
   const start = Date.now();
+  
   res.on('finish', () => {
     const duration = Date.now() - start;
     if (req.path !== '/health') {
-      console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+      const logData = {
+        requestId: req.id,
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        duration: `${duration}ms`,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip,
+      };
+      
+      if (res.statusCode >= 400) {
+        console.error('请求失败:', JSON.stringify(logData));
+      } else {
+        console.log('请求成功:', JSON.stringify(logData));
+      }
     }
   });
   next();
@@ -65,20 +101,52 @@ app.use('/documents', documentRoutes);
 
 // ============ 错误处理 ============
 
-// 404
+// 404处理
 app.use((req, res) => {
-  res.status(404).json({ error: `未找到路由: ${req.method} ${req.path}` });
+  res.status(404).json({ 
+    error: '未找到路由',
+    path: req.path,
+    method: req.method,
+    requestId: req.id,
+  });
 });
 
 // 全局错误处理
 app.use((err, req, res, next) => {
-  console.error('未捕获错误:', err);
-  res.status(500).json({ error: '服务器内部错误' });
+  // 错误分类
+  const errorType = err.name || 'UnknownError';
+  const statusCode = err.statusCode || 500;
+  const isOperational = err.isOperational || false;
+  
+  // 日志记录
+  const errorLog = {
+    requestId: req.id,
+    type: errorType,
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+  };
+  
+  if (statusCode >= 500) {
+    console.error('服务器错误:', JSON.stringify(errorLog));
+  } else {
+    console.warn('客户端错误:', JSON.stringify(errorLog));
+  }
+  
+  // 响应
+  res.status(statusCode).json({
+    error: isOperational ? err.message : '服务器内部错误',
+    type: errorType,
+    requestId: req.id,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+  });
 });
 
 // ============ 启动 ============
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
   console.log(`📝 热点API: http://localhost:${PORT}/baidu/hot`);
   console.log(`🖼️  图片API: http://localhost:${PORT}/unsplash/search`);
