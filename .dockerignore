@@ -1,0 +1,12 @@
+node_modules
+.git
+*.log
+.env
+server/data
+server/.env
+app/dist
+app/node_modules
+dailyhot-api
+.claude
+*.md
+!README.md

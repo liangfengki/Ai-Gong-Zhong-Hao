@@ -13,6 +13,7 @@ const ALLOWED_BASE_URLS = [
   'https://openrouter.ai',
   'https://api.siliconflow.cn',
   'https://api.hunyuan.cloud.tencent.com',
+  'https://apihub.agnes-ai.com',
 ];
 
 function isAllowedBaseUrl(url) {

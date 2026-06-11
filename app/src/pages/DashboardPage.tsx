@@ -66,7 +66,7 @@ export function DashboardPage() {
   const stats = [
     { label: '文章总数', value: articles.length, icon: FileText },
     { label: '今日热点', value: hotTopics.length, icon: TrendingUp },
-    { label: '已启用技能', value: settings.skills.filter(s => s.enabled).length, icon: Sparkles },
+    { label: '已启用技能', value: (settings.skills ?? []).filter(s => s.enabled).length, icon: Sparkles },
   ];
 
   return (

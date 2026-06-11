@@ -3,7 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+import { initDB } from './db.js';
 import hotRoutes from './routes/hot.js';
 import imageRoutes from './routes/images.js';
 import aiRoutes from './routes/ai.js';
@@ -11,8 +14,15 @@ import documentRoutes from './routes/documents.js';
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
 const PORT = process.env.PORT || 6356;
+
+// Railway 等反向代理需要信任 X-Forwarded-* 头
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // ============ 安全中间件 ============
 
@@ -94,10 +104,25 @@ app.get('/health', (req, res) => {
 
 // ============ 路由挂载 ============
 
-app.use('/', hotRoutes);
-app.use('/', imageRoutes);
-app.use('/ai', aiRoutes);
-app.use('/documents', documentRoutes);
+// 所有 API 路由挂载到 /api 前缀（与前端 PROXY_BASE='/api' 一致）
+app.use('/api', hotRoutes);
+app.use('/api', imageRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/documents', documentRoutes);
+
+// ============ 静态文件服务（前端 SPA） ============
+
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
+
+// SPA fallback：所有非 API 请求返回 index.html
+app.get('*', (req, res, next) => {
+  // 只处理 HTML 请求（非文件扩展名）
+  if (req.path.includes('.')) return next();
+  res.sendFile(path.join(publicDir, 'index.html'), (err) => {
+    if (err) next();
+  });
+});
 
 // ============ 错误处理 ============
 
@@ -146,11 +171,21 @@ app.use((err, req, res, next) => {
 
 // ============ 启动 ============
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-  console.log(`📝 热点API: http://localhost:${PORT}/baidu/hot`);
-  console.log(`🖼️  图片API: http://localhost:${PORT}/unsplash/search`);
-  console.log(`🤖 AI API: http://localhost:${PORT}/ai/generate`);
-  console.log(`📄 文档API: http://localhost:${PORT}/documents`);
-  console.log(`❤️  健康检查: http://localhost:${PORT}/health`);
+async function start() {
+  // 初始化数据库
+  await initDB();
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+    console.log(`📝 热点API: http://localhost:${PORT}/baidu/hot`);
+    console.log(`🖼️  图片API: http://localhost:${PORT}/unsplash/search`);
+    console.log(`🤖 AI API: http://localhost:${PORT}/ai/generate`);
+    console.log(`📄 文档API: http://localhost:${PORT}/documents`);
+    console.log(`❤️  健康检查: http://localhost:${PORT}/health`);
+  });
+}
+
+start().catch(err => {
+  console.error('启动失败:', err);
+  process.exit(1);
 });
