@@ -39,11 +39,11 @@ function isAllowedBaseUrl(url) {
   }
 }
 
-// 获取 API 配置（支持前端自定义 > 环境变量）
+// 获取 API 配置（服务端环境变量优先，前端设置作为 fallback）
 export function getAIConfig(req) {
-  const apiKey = req.headers['x-api-key'] || process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY;
-  let baseUrl = req.headers['x-base-url'] || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1';
-  const model = req.headers['x-model'] || req.body?.model || process.env.DEFAULT_MODEL || 'deepseek-chat';
+  const apiKey = process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY || req.headers['x-api-key'];
+  let baseUrl = process.env.OPENAI_BASE_URL || req.headers['x-base-url'] || 'https://api.deepseek.com/v1';
+  const model = process.env.DEFAULT_MODEL || req.headers['x-model'] || req.body?.model || 'deepseek-chat';
 
   // SSRF 防护：验证 base URL
   if (req.headers['x-base-url'] && !isAllowedBaseUrl(baseUrl)) {
