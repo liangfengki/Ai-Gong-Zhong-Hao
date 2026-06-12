@@ -45,8 +45,8 @@ interface AppStore {
 const defaultSettings: UserSettings = {
   ai: {
     apiKey: '',
-    model: 'deepseek-chat',
-    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'mimo-auto',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
     temperature: 0.7,
     maxTokens: 2000,
   },
