@@ -88,8 +88,9 @@ for (let index = 0; index < allRoutePath.length; index++) {
       }
       return c.json({ code: 200, ...listData });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return c.json({ code: 500, message: `获取 ${router} 数据失败: ${message}` }, 500);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[${router}] Route error:`, message);
+      return c.json({ code: 500, route: router, message: `Route error: ${message}` }, 500);
     }
   });
   // 请求方式错误
