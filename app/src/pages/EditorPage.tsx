@@ -174,8 +174,8 @@ export function EditorPage() {
   onGenerateRef.current = async () => {
     // 保存内容快照，失败时恢复（从编辑器实时读取，不依赖闭包）
     const previousContent = editorRef.current?.getEditor()?.getHTML() || content;
-    // 清空编辑器准备接收流式内容
-    setContent('');
+    // 使用 clearContent 清空编辑器准备接收流式内容
+    editorRef.current?.clearContent();
     const prompt = `
       ${additionalPrompt}
       要求：
@@ -189,11 +189,14 @@ export function EditorPage() {
       await handleGenerate(prompt, wordCount, (chunk) => {
         if (editorRef.current) {
           editorRef.current.appendContent(chunk);
-        } else {
-          setContent((prev) => prev + chunk);
         }
       });
     } catch (error) {
+      // 恢复编辑器内容
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.commands.setContent(previousContent);
+      }
       setContent(previousContent);
       const errorMessage = error instanceof Error ? error.message : 'AI 生成失败，请稍后重试';
       toast.error('生成失败', { description: errorMessage });
@@ -209,7 +212,7 @@ export function EditorPage() {
       return;
     }
     const previousContent = currentContent;
-    setContent('');
+    editorRef.current?.clearContent();
     const prompt = `
       以下是原文内容：
       ${currentContent.replace(/<[^>]*>/g, '\n')}
@@ -226,11 +229,14 @@ export function EditorPage() {
       await handleGenerate(prompt, wordCount, (chunk) => {
         if (editorRef.current) {
           editorRef.current.appendContent(chunk);
-        } else {
-          setContent((prev) => prev + chunk);
         }
       });
     } catch (error) {
+      // 恢复编辑器内容
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.commands.setContent(previousContent);
+      }
       setContent(previousContent);
       const errorMessage = error instanceof Error ? error.message : 'AI 处理失败，请稍后重试';
       toast.error('处理失败', { description: errorMessage });
@@ -285,6 +291,15 @@ export function EditorPage() {
   const handleRestoreVersion = (version: ArticleVersion) => {
     setTitle(version.title);
     setContent(version.content);
+    // 更新 currentArticle 的 updatedAt，避免数据不一致
+    if (currentArticle) {
+      setCurrentArticle({
+        ...currentArticle,
+        title: version.title,
+        content: version.content,
+        updatedAt: new Date().toISOString(),
+      });
+    }
     toast.success('已恢复到历史版本');
   };
 

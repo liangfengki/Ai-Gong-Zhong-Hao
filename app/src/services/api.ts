@@ -66,12 +66,24 @@ const PROXY_BASE = '/api';
 
 // ============ 热点API ============
 
+// 简单的哈希函数，用于生成稳定的 ID
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
 // 获取单个平台热点
 async function fetchHotBySource(source: string): Promise<HotTopic[]> {
   try {
     const { data } = await axios.get<HotApiResponse>(`${PROXY_BASE}/${source}/hot`);
-    return (data.data || []).map((item, index) => ({
-      id: `${source}-${index}`,
+    return (data.data || []).map((item) => ({
+      // 使用标题哈希生成稳定 ID，避免 index 变化导致收藏失效
+      id: `${source}-${hashString(item.title)}`,
       title: item.title,
       url: item.url || '',
       hot: item.hot || 0,

@@ -49,6 +49,8 @@ export interface RichTextEditorHandle {
   getEditor: () => ReturnType<typeof useEditor>;
   /** 追加内容到编辑器末尾（不经过 React state，不重置光标） */
   appendContent: (html: string) => void;
+  /** 清空编辑器内容 */
+  clearContent: () => void;
 }
 
 type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
@@ -280,7 +282,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     [editor]
   );
 
-  // 暴露 editor 实例和 appendContent 给父组件
+  // 暴露 editor 实例和 appendContent、clearContent 给父组件
   useImperativeHandle(ref, () => ({
     getEditor: () => editor!,
     appendContent: (html: string) => {
@@ -292,6 +294,12 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .focus('end')
         .run();
       // 同步到 React state
+      isInternalChange.current = true;
+      onChange(editor.getHTML());
+    },
+    clearContent: () => {
+      if (!editor) return;
+      editor.commands.clearContent();
       isInternalChange.current = true;
       onChange(editor.getHTML());
     },
