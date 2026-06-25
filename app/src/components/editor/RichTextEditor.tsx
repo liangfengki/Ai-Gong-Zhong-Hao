@@ -51,6 +51,16 @@ export interface RichTextEditorHandle {
   appendContent: (html: string) => void;
   /** 清空编辑器内容 */
   clearContent: () => void;
+  /** 获取选中的文本（纯文本） */
+  getSelectedText: () => string;
+  /** 获取选中区域的 HTML */
+  getSelectedHtml: () => string;
+  /** 替换选中的内容 */
+  replaceSelectedContent: (html: string) => void;
+  /** 在指定位置插入内容 */
+  insertContentAtPosition: (pos: number, html: string) => void;
+  /** 获取当前选区信息 */
+  getSelectionInfo: () => { from: number; to: number; empty: boolean };
 }
 
 type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
@@ -282,7 +292,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     [editor]
   );
 
-  // 暴露 editor 实例和 appendContent、clearContent 给父组件
+  // 暴露 editor 实例和扩展方法给父组件
   useImperativeHandle(ref, () => ({
     getEditor: () => editor!,
     appendContent: (html: string) => {
@@ -303,7 +313,111 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       isInternalChange.current = true;
       onChange(editor.getHTML());
     },
+    getSelectedText: () => {
+      if (!editor) return '';
+      const { from, to } = editor.state.selection;
+      return editor.state.doc.textBetween(from, to, '');
+    },
+    getSelectedHtml: () => {
+      if (!editor) return '';
+      const { from, to } = editor.state.selection;
+      if (from === to) return '';
+      const slice = editor.state.doc.slice(from, to);
+      const div = document.createElement('div');
+      const serializer = editor.view.someProp('clipboardSerializer');
+      if (serializer) {
+        const fragment = serializer.serializeFragment(slice.content);
+        div.appendChild(fragment);
+      }
+      return div.innerHTML;
+    },
+    replaceSelectedContent: (html: string) => {
+      if (!editor) return;
+      const { from, to } = editor.state.selection;
+      editor.chain()
+        .focus()
+        .deleteRange({ from, to })
+        .insertContentAt(from, html)
+        .run();
+      // 同步到 React state
+      isInternalChange.current = true;
+      onChange(editor.getHTML());
+    },
+    insertContentAtPosition: (pos: number, html: string) => {
+      if (!editor) return;
+      editor.chain()
+        .insertContentAt(pos, html)
+        .run();
+      // 同步到 React state
+      isInternalChange.current = true;
+      onChange(editor.getHTML());
+    },
+    getSelectionInfo: () => {
+      if (!editor) return { from: 0, to: 0, empty: true };
+      const { from, to } = editor.state.selection;
+      return { from, to, empty: from === to };
+    },
   }), [editor, onChange]);
+
+  // 处理粘贴事件，支持 HTML 格式图片
+  useEffect(() => {
+    if (!editor) return;
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return;
+
+      // 检查剪贴板中是否有 HTML 内容
+      const htmlContent = clipboardData.getData('text/html');
+      if (htmlContent) {
+        // 检查 HTML 中是否包含图片标签
+        const imgMatch = htmlContent.match(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/i);
+        if (imgMatch) {
+          event.preventDefault();
+          const imgSrc = imgMatch[1];
+          // 提取 alt 属性（如果有）
+          const altMatch = htmlContent.match(/<img[^>]+alt\s*=\s*["']([^"']*)["'][^>]*>/i);
+          const imgAlt = altMatch ? altMatch[1] : '';
+          
+          editor.chain().focus().setImage({ src: imgSrc, alt: imgAlt }).run();
+          return;
+        }
+      }
+
+      // 检查纯文本中是否是图片 URL
+      const textContent = clipboardData.getData('text/plain');
+      if (textContent && /\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i.test(textContent.trim())) {
+        event.preventDefault();
+        editor.chain().focus().setImage({ src: textContent.trim() }).run();
+      }
+    };
+
+    const editorDom = editor.view.dom;
+    editorDom.addEventListener('paste', handlePaste);
+    
+    return () => {
+      editorDom.removeEventListener('paste', handlePaste);
+    };
+  }, [editor]);
+
+  // 监听自定义事件，从图片素材库插入图片
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleInsertImageEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ url: string; alt: string }>;
+      const { url, alt } = customEvent.detail;
+      if (url) {
+        editor.chain().focus().setImage({ src: url, alt: alt || '' }).run();
+      }
+    };
+
+    window.addEventListener('insertImageToEditor', handleInsertImageEvent);
+    
+    return () => {
+      window.removeEventListener('insertImageToEditor', handleInsertImageEvent);
+    };
+  }, [editor]);
 
   // 通知父组件 editor 已就绪
   useEffect(() => {

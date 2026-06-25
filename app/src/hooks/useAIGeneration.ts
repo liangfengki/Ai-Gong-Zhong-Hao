@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
-import { generateArticleStream, generateImage } from '@/services/api';
+import { generateArticleStream, generateImage, generateVideo } from '@/services/api';
 import { toast } from 'sonner';
 
 export function useAIGeneration() {
   const { settings } = useAppStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
 
   const handleGenerate = useCallback(async (
     prompt: string,
@@ -59,7 +60,32 @@ export function useAIGeneration() {
     }
   };
 
-  return { isGenerating, isGeneratingImage, handleGenerate, handleGenerateImage };
+  const handleGenerateVideo = async (videoPrompt: string, image?: string): Promise<string | null> => {
+    if (!videoPrompt.trim()) {
+      toast.error('请输入描述', { description: '请描述您想要生成的视频' });
+      return null;
+    }
+
+    setIsGeneratingVideo(true);
+    try {
+      const videoUrl = await generateVideo(
+        videoPrompt,
+        settings.ai.apiKey,
+        settings.ai.baseUrl,
+        image
+      );
+      toast.success('视频生成成功');
+      return videoUrl;
+    } catch (err) {
+      const message = getErrorMessage(err);
+      toast.error('视频生成失败', { description: message });
+      return null;
+    } finally {
+      setIsGeneratingVideo(false);
+    }
+  };
+
+  return { isGenerating, isGeneratingImage, isGeneratingVideo, handleGenerate, handleGenerateImage, handleGenerateVideo };
 }
 
 function getErrorMessage(err: unknown): string {

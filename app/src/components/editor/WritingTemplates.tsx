@@ -31,7 +31,7 @@ const templateCategories: TemplateCategory[] = [
   {
     id: 'titles',
     name: '爆款标题',
-    icon: '🔥',
+    icon: '',
     templates: [
       { id: 't1', name: '数字型', content: 'X个方法让你的XXX提升XX%' },
       { id: 't2', name: '疑问型', content: '为什么XXX？看完这篇你就懂了' },
@@ -46,7 +46,7 @@ const templateCategories: TemplateCategory[] = [
   {
     id: 'openings',
     name: '开头模板',
-    icon: '✍️',
+    icon: '',
     templates: [
       { id: 'o1', name: '提问式', content: '你有没有想过，为什么XXX？今天我们就来聊聊这个话题。' },
       { id: 'o2', name: '故事式', content: '前几天，我的朋友小X跟我吐槽了一件事...（故事引入正文）' },
@@ -61,7 +61,7 @@ const templateCategories: TemplateCategory[] = [
   {
     id: 'endings',
     name: '结尾模板',
-    icon: '🎯',
+    icon: '',
     templates: [
       { id: 'e1', name: '总结式', content: '以上就是今天的全部内容，我们来简单回顾一下：\n1. XXX\n2. XXX\n3. XXX\n希望对你有所帮助！' },
       { id: 'e2', name: '号召式', content: '如果你觉得这篇文章有用，别忘了点赞+收藏+转发，让更多人看到！' },
@@ -70,13 +70,13 @@ const templateCategories: TemplateCategory[] = [
       { id: 'e5', name: '预告式', content: '下期预告：我们将深入探讨XXX，敬请期待！关注我，不错过任何干货。' },
       { id: 'e6', name: '金句式', content: '最后送给大家一句话：\n"XXXXXX。"\n与诸位共勉。' },
       { id: 'e7', name: '反思式', content: '写到这里，我突然想到一个问题：我们真的理解XXX吗？也许，答案就在我们每天的XXX中。' },
-      { id: 'e8', name: '温暖式', content: '愿你在XXX的路上，既有披荆斩棘的勇气，也有细嗅蔷薇的温柔。我们下期见 ❤️' },
+      { id: 'e8', name: '温暖式', content: '愿你在XXX的路上，既有披荆斩棘的勇气，也有细嗅蔷薇的温柔。我们下期见' },
     ],
   },
   {
     id: 'quotes',
     name: '金句模板',
-    icon: '💡',
+    icon: '',
     templates: [
       { id: 'q1', name: '励志型', content: '每一个优秀的人，都有一段沉默的时光。' },
       { id: 'q2', name: '思考型', content: '所谓成长，就是不断地与过去的自己告别。' },

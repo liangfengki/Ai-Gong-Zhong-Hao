@@ -15,6 +15,7 @@ interface HotApiResponse {
   requestId?: string;
   source?: string;
   cached?: boolean;
+  stale?: boolean;
   mock?: boolean;
 }
 
@@ -61,6 +62,26 @@ interface AIImageResponse {
   url: string;
 }
 
+// AI内容分析响应类型
+export interface AIAnalysisResult {
+  qualityScore: number;
+  seo: {
+    score: number;
+    suggestions: string[];
+  };
+  readability: {
+    score: number;
+    level: string;
+    details: string[];
+  };
+  sentiment: {
+    type: string;
+    score: number;
+    description: string;
+  };
+  improvements: string[];
+}
+
 // 代理服务器地址（用于避免CORS问题）
 const PROXY_BASE = '/api';
 
@@ -78,10 +99,10 @@ function hashString(str: string): string {
 }
 
 // 获取单个平台热点
-async function fetchHotBySource(source: string): Promise<HotTopic[]> {
+async function fetchHotBySource(source: string): Promise<{ topics: HotTopic[]; stale?: boolean; mock?: boolean }> {
   try {
     const { data } = await axios.get<HotApiResponse>(`${PROXY_BASE}/${source}/hot`);
-    return (data.data || []).map((item) => ({
+    const topics = (data.data || []).map((item, index) => ({
       // 使用标题哈希生成稳定 ID，避免 index 变化导致收藏失效
       id: `${source}-${hashString(item.title)}`,
       title: item.title,
@@ -92,44 +113,45 @@ async function fetchHotBySource(source: string): Promise<HotTopic[]> {
       description: item.desc || '',
       rank: item.index || index + 1,
     }));
+    return { topics, stale: data.stale, mock: data.mock };
   } catch (error) {
     console.error(`获取${source}热点失败:`, error);
-    return [];
+    return { topics: [] };
   }
 }
 
 // 获取百度热搜
-export async function fetchBaiduHot(): Promise<HotTopic[]> {
+export async function fetchBaiduHot() {
   return fetchHotBySource('baidu');
 }
 
 // 获取微博热搜
-export async function fetchWeiboHot(): Promise<HotTopic[]> {
+export async function fetchWeiboHot() {
   return fetchHotBySource('weibo');
 }
 
 // 获取抖音热搜
-export async function fetchDouyinHot(): Promise<HotTopic[]> {
+export async function fetchDouyinHot() {
   return fetchHotBySource('douyin');
 }
 
 // 获取知乎热榜
-export async function fetchZhihuHot(): Promise<HotTopic[]> {
+export async function fetchZhihuHot() {
   return fetchHotBySource('zhihu');
 }
 
 // 获取今日头条热榜
-export async function fetchToutiaoHot(): Promise<HotTopic[]> {
+export async function fetchToutiaoHot() {
   return fetchHotBySource('toutiao');
 }
 
 // 获取哔哩哔哩热榜
-export async function fetchBilibiliHot(): Promise<HotTopic[]> {
+export async function fetchBilibiliHot() {
   return fetchHotBySource('bilibili');
 }
 
 // 获取所有热点
-export async function fetchAllHotTopics(): Promise<HotTopic[]> {
+export async function fetchAllHotTopics(): Promise<{ topics: HotTopic[]; stale: boolean; mock: boolean }> {
   const [baidu, weibo, douyin, zhihu, toutiao, bilibili] = await Promise.allSettled([
     fetchBaiduHot(),
     fetchWeiboHot(),
@@ -140,22 +162,29 @@ export async function fetchAllHotTopics(): Promise<HotTopic[]> {
   ]);
   
   const topics: HotTopic[] = [];
-  if (baidu.status === 'fulfilled') topics.push(...baidu.value);
-  if (weibo.status === 'fulfilled') topics.push(...weibo.value);
-  if (douyin.status === 'fulfilled') topics.push(...douyin.value);
-  if (zhihu.status === 'fulfilled') topics.push(...zhihu.value);
-  if (toutiao.status === 'fulfilled') topics.push(...toutiao.value);
-  if (bilibili.status === 'fulfilled') topics.push(...bilibili.value);
-  
-  return topics;
+  let stale = false;
+  let allMock = true;
+  let hasData = false;
+
+  const results = [baidu, weibo, douyin, zhihu, toutiao, bilibili];
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      topics.push(...result.value.topics);
+      if (result.value.stale) stale = true;
+      if (!result.value.mock) allMock = false;
+      if (result.value.topics.length > 0) hasData = true;
+    }
+  }
+
+  return { topics, stale, mock: allMock && hasData || (!hasData) };
 }
 
 // ============ 图片API ============
 
 // Unsplash API
-export async function searchUnsplash(filter: ImageSearchFilter): Promise<ImageAsset[]> {
+export async function searchUnsplash(filter: ImageSearchFilter): Promise<{ images: ImageAsset[]; source?: string }> {
   try {
-    const { data } = await axios.get<{ results: UnsplashPhoto[] }>(`${PROXY_BASE}/unsplash/search`, {
+    const { data } = await axios.get<{ results: UnsplashPhoto[]; source?: string }>(`${PROXY_BASE}/unsplash/search`, {
       params: {
         query: filter.query,
         page: filter.page,
@@ -164,7 +193,7 @@ export async function searchUnsplash(filter: ImageSearchFilter): Promise<ImageAs
       },
     });
     
-    return data.results.map((item) => ({
+    const images = data.results.map((item) => ({
       id: `unsplash-${item.id}`,
       url: item.urls?.regular || '',
       thumbUrl: item.urls?.thumb || '',
@@ -173,16 +202,17 @@ export async function searchUnsplash(filter: ImageSearchFilter): Promise<ImageAs
       source: 'unsplash' as const,
       downloadUrl: item.links?.download || '',
     }));
+    return { images, source: data.source };
   } catch (error) {
     console.error('Unsplash搜索失败:', error);
-    return [];
+    return { images: [] };
   }
 }
 
 // Pexels API
-export async function searchPexels(filter: ImageSearchFilter): Promise<ImageAsset[]> {
+export async function searchPexels(filter: ImageSearchFilter): Promise<{ images: ImageAsset[]; source?: string }> {
   try {
-    const { data } = await axios.get<{ photos: PexelsPhoto[] }>(`${PROXY_BASE}/pexels/search`, {
+    const { data } = await axios.get<{ photos: PexelsPhoto[]; source?: string }>(`${PROXY_BASE}/pexels/search`, {
       params: {
         query: filter.query,
         page: filter.page,
@@ -191,7 +221,7 @@ export async function searchPexels(filter: ImageSearchFilter): Promise<ImageAsse
       },
     });
     
-    return data.photos.map((item) => ({
+    const images = data.photos.map((item) => ({
       id: `pexels-${item.id}`,
       url: item.src?.large || '',
       thumbUrl: item.src?.medium || '',
@@ -200,16 +230,17 @@ export async function searchPexels(filter: ImageSearchFilter): Promise<ImageAsse
       source: 'pexels' as const,
       downloadUrl: item.src?.original || '',
     }));
+    return { images, source: data.source };
   } catch (error) {
     console.error('Pexels搜索失败:', error);
-    return [];
+    return { images: [] };
   }
 }
 
 // Pixabay API
-export async function searchPixabay(filter: ImageSearchFilter): Promise<ImageAsset[]> {
+export async function searchPixabay(filter: ImageSearchFilter): Promise<{ images: ImageAsset[]; source?: string }> {
   try {
-    const { data } = await axios.get<{ hits: PixabayHit[] }>(`${PROXY_BASE}/pixabay/search`, {
+    const { data } = await axios.get<{ hits: PixabayHit[]; source?: string }>(`${PROXY_BASE}/pixabay/search`, {
       params: {
         q: filter.query,
         page: filter.page,
@@ -218,7 +249,7 @@ export async function searchPixabay(filter: ImageSearchFilter): Promise<ImageAss
       },
     });
     
-    return data.hits.map((item) => ({
+    const images = data.hits.map((item) => ({
       id: `pixabay-${item.id}`,
       url: item.largeImageURL || '',
       thumbUrl: item.previewURL || '',
@@ -227,14 +258,15 @@ export async function searchPixabay(filter: ImageSearchFilter): Promise<ImageAss
       source: 'pixabay' as const,
       downloadUrl: item.largeImageURL || '',
     }));
+    return { images, source: data.source };
   } catch (error) {
     console.error('Pixabay搜索失败:', error);
-    return [];
+    return { images: [] };
   }
 }
 
 // 搜索所有图片源
-export async function searchAllImages(filter: ImageSearchFilter): Promise<ImageAsset[]> {
+export async function searchAllImages(filter: ImageSearchFilter): Promise<{ images: ImageAsset[]; sources: string[] }> {
   const [unsplash, pexels, pixabay] = await Promise.allSettled([
     searchUnsplash(filter),
     searchPexels(filter),
@@ -242,11 +274,21 @@ export async function searchAllImages(filter: ImageSearchFilter): Promise<ImageA
   ]);
   
   const images: ImageAsset[] = [];
-  if (unsplash.status === 'fulfilled') images.push(...unsplash.value);
-  if (pexels.status === 'fulfilled') images.push(...pexels.value);
-  if (pixabay.status === 'fulfilled') images.push(...pixabay.value);
+  const sources: string[] = [];
+  if (unsplash.status === 'fulfilled') {
+    images.push(...unsplash.value.images);
+    if (unsplash.value.source) sources.push(unsplash.value.source);
+  }
+  if (pexels.status === 'fulfilled') {
+    images.push(...pexels.value.images);
+    if (pexels.value.source) sources.push(pexels.value.source);
+  }
+  if (pixabay.status === 'fulfilled') {
+    images.push(...pixabay.value.images);
+    if (pixabay.value.source) sources.push(pixabay.value.source);
+  }
   
-  return images;
+  return { images, sources };
 }
 
 // ============ AI API ============
@@ -357,6 +399,54 @@ export async function generateImage(
     return data.url;
   } catch (error) {
     console.error('AI图片生成失败:', error);
+    throw error;
+  }
+}
+
+// AI内容分析
+export async function analyzeContent(
+  title: string,
+  content: string,
+  apiKey: string,
+  model: string = 'deepseek-chat',
+  baseUrl?: string
+): Promise<AIAnalysisResult> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['x-api-key'] = apiKey;
+    if (baseUrl) headers['x-base-url'] = baseUrl;
+    if (model) headers['x-model'] = model;
+
+    const { data } = await axios.post<AIAnalysisResult>(`${PROXY_BASE}/ai/analyze-content`, {
+      title,
+      content,
+    }, { headers });
+    return data;
+  } catch (error) {
+    console.error('AI内容分析失败:', error);
+    throw error;
+  }
+}
+
+// AI生成视频
+export async function generateVideo(
+  prompt: string,
+  apiKey: string,
+  baseUrl?: string,
+  image?: string
+): Promise<string> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['x-api-key'] = apiKey;
+    if (baseUrl) headers['x-base-url'] = baseUrl;
+
+    const body: Record<string, unknown> = { prompt };
+    if (image) body.image = image;
+
+    const { data } = await axios.post<{ url: string }>(`${PROXY_BASE}/ai/generate-video`, body, { headers });
+    return data.url;
+  } catch (error) {
+    console.error('AI视频生成失败:', error);
     throw error;
   }
 }

@@ -45,7 +45,7 @@ interface AppStore {
 const defaultSettings: UserSettings = {
   ai: {
     apiKey: '',
-    model: 'mimo-auto',
+    model: 'agnes-2.0-flash',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     temperature: 0.7,
     maxTokens: 2000,
@@ -61,6 +61,7 @@ const defaultSettings: UserSettings = {
   darkMode: false,
   followSystemTheme: false,
   favoriteTopics: [],
+  aiModelMode: 'default',
 };
 
 export const useAppStore = create<AppStore>()(

@@ -105,8 +105,36 @@ export const aiValidation = {
       .withMessage('提示词不能超过1,000个字符'),
     body('size')
       .optional()
-      .isIn(['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'])
+      .isIn(['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792', '1024x768', '768x1024'])
       .withMessage('无效的图片尺寸'),
+    handleValidationErrors,
+  ],
+
+  generateVideo: [
+    body('prompt')
+      .trim()
+      .notEmpty()
+      .withMessage('提示词不能为空')
+      .isLength({ max: 2000 })
+      .withMessage('提示词不能超过2,000个字符'),
+    body('image')
+      .optional(),
+    handleValidationErrors,
+  ],
+
+  analyzeContent: [
+    body('title')
+      .trim()
+      .notEmpty()
+      .withMessage('文章标题不能为空')
+      .isLength({ max: 200 })
+      .withMessage('标题不能超过200个字符'),
+    body('content')
+      .trim()
+      .notEmpty()
+      .withMessage('文章内容不能为空')
+      .isLength({ max: 50000 })
+      .withMessage('内容不能超过50,000个字符'),
     handleValidationErrors,
   ],
 };

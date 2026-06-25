@@ -50,6 +50,7 @@ export function HotTopicsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [dataStatus, setDataStatus] = useState<{ stale?: boolean; mock?: boolean }>({});
 
   const [pendingTopic, setPendingTopic] = useState<HotTopic | null>(null);
   const favoriteTopics = settings.favoriteTopics || [];
@@ -61,8 +62,9 @@ export function HotTopicsPage() {
   const loadHotTopics = async () => {
     setLoading(true);
     try {
-      const topics = await fetchAllHotTopics();
-      setHotTopics(topics);
+      const result = await fetchAllHotTopics();
+      setHotTopics(result.topics);
+      setDataStatus({ stale: result.stale, mock: result.mock });
     } catch (error) {
       console.error('加载热点失败:', error);
       toast.error('加载热点失败', { description: '请检查网络连接后重试' });
@@ -109,6 +111,20 @@ export function HotTopicsPage() {
           刷新热点
         </Button>
       </div>
+
+      {/* 数据来源提示 */}
+      {dataStatus.mock && (
+        <div className="flex items-center gap-2 rounded-lg border border-muted bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          <Flame className="h-4 w-4" />
+          未能获取实时热点，当前显示示例数据。请稍后刷新重试。
+        </div>
+      )}
+      {dataStatus.stale && !dataStatus.mock && (
+        <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
+          <RefreshCw className="h-4 w-4" />
+          当前显示缓存数据，可能不是最新热点。点击"刷新热点"获取最新数据。
+        </div>
+      )}
 
       {/* Search */}
       <div className="flex items-center gap-4">

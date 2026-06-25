@@ -30,7 +30,10 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
       status: 'draft',
     };
     setCurrentArticle(article);
-    if (current) {
+    
+    // 检查文章是否已存在于列表中
+    const existsInList = store.articles.some(a => a.id === articleId);
+    if (existsInList) {
       updateArticle(article.id, {
         title: article.title,
         content: article.content,

@@ -24,7 +24,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (hotTopics.length === 0) {
       fetchAllHotTopics()
-        .then((topics) => { if (topics.length > 0) setHotTopics(topics); })
+        .then((result) => { if (result.topics.length > 0) setHotTopics(result.topics); })
         .catch(() => {});
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,7 +74,7 @@ export function DashboardPage() {
       {/* 欢迎区域 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">👋 欢迎回来</h1>
+          <h1 className="text-3xl font-bold tracking-tight">欢迎回来</h1>
           <p className="text-muted-foreground">
             AI公众号写作助手，让创作更高效
           </p>
@@ -248,7 +248,7 @@ export function DashboardPage() {
                         </Badge>
                         {topic.hot > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            🔥 {topic.hot > 10000 ? `${(topic.hot / 10000).toFixed(1)}万` : topic.hot}
+                            {topic.hot > 10000 ? `${(topic.hot / 10000).toFixed(1)}万` : topic.hot}
                           </span>
                         )}
                       </div>

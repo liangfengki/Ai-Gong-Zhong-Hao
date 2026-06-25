@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
           <div className="text-center space-y-4 max-w-md">
-            <div className="text-6xl">😵</div>
+            <div className="text-6xl">⚠️</div>
             <h1 className="text-2xl font-bold">页面崩溃了</h1>
             <p className="text-muted-foreground">
               {this.state.error?.message || '发生了未知错误'}

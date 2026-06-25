@@ -13,6 +13,7 @@ import {
   Zap,
   Palette,
   BarChart3,
+  Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,7 @@ import { useAIGeneration } from '@/hooks/useAIGeneration';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import type { HotTopic, ArticleVersion, Article } from '@/types';
+import { markdownToHtml } from '@/lib/formatUtils';
 
 export function EditorPage() {
   const location = useLocation();
@@ -63,6 +65,11 @@ export function EditorPage() {
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [activeSideTab, setActiveSideTab] = useState<string>('ai');
+  
+  // 快捷操作状态
+  const [isRefining, setIsRefining] = useState(false);
+  const [refineProgress, setRefineProgress] = useState('');
+  const [lastRefinedContent, setLastRefinedContent] = useState<string | null>(null);
 
   const { saveStatus, saveNow } = useAutoSave(title, content, wordCount);
   const { handleCopy, handleCopyForWechat } = useArticleActions(title, content);
@@ -184,13 +191,29 @@ export function EditorPage() {
       3. 段落清晰，有小标题
       4. 内容有深度，能引发读者共鸣
       5. 开头要有吸引力，结尾要有升华
+      6. 使用 Markdown 格式输出：标题用 # ## ###，加粗用 **文字**，列表用 - 开头
+      7. 每个段落为连续文字，段落内不要换行，段落之间用空行分隔
+      8. 不要在每句话后面都换行，一个段落应该包含多句话
     `;
     try {
+      let mdBuffer = '';
       await handleGenerate(prompt, wordCount, (chunk) => {
-        if (editorRef.current) {
-          editorRef.current.appendContent(chunk);
+        if (!editorRef.current) return;
+        mdBuffer += chunk;
+        // 按段落分隔（\n\n）flush，避免逐 token 插入导致碎片化换行
+        const parts = mdBuffer.split('\n\n');
+        // 最后一段可能不完整，保留在 buffer 中
+        mdBuffer = parts.pop() || '';
+        for (const part of parts) {
+          if (part.trim()) {
+            editorRef.current.appendContent(markdownToHtml(part + '\n\n'));
+          }
         }
       });
+      // flush 剩余 buffer
+      if (mdBuffer.trim() && editorRef.current) {
+        editorRef.current.appendContent(markdownToHtml(mdBuffer));
+      }
     } catch (error) {
       // 恢复编辑器内容
       const editor = editorRef.current?.getEditor();
@@ -204,18 +227,37 @@ export function EditorPage() {
   };
   const onGenerate = useCallback(() => onGenerateRef.current?.(), []);
 
-  // 基于现有内容进行 AI 改写（去AI味、生成摘要等）
+  // 通用 AI 优化函数（支持选中文字模式和全文模式）
+  // 可用于自定义优化指令，如：onRefineContent('将文章改为更正式的语气')
   const onRefineContent = useCallback(async (instruction: string) => {
-    const currentContent = editorRef.current?.getEditor()?.getHTML() || content;
-    if (!currentContent.trim()) {
+    const editor = editorRef.current?.getEditor();
+    if (!editor) return;
+
+    // 获取选中信息
+    const selectionInfo = editorRef.current?.getSelectionInfo();
+    const hasSelection = selectionInfo && !selectionInfo.empty;
+    const selectedText = hasSelection ? editorRef.current?.getSelectedText() || '' : '';
+    
+    // 确定要处理的内容
+    const contentToProcess = hasSelection ? selectedText : (editor.getHTML() || content);
+    
+    if (!contentToProcess.trim()) {
       toast.error('请先写点内容');
       return;
     }
-    const previousContent = currentContent;
-    editorRef.current?.clearContent();
-    const prompt = `
-      以下是原文内容：
-      ${currentContent.replace(/<[^>]*>/g, '\n')}
+
+    // 保存当前内容用于撤销
+    const previousContent = editor.getHTML();
+    setLastRefinedContent(previousContent);
+    
+    // 设置处理状态
+    setIsRefining(true);
+    setRefineProgress('正在处理中...');
+
+    // 构建提示词
+    const prompt = hasSelection ? `
+      以下是需要优化的选中内容：
+      ${selectedText}
 
       请根据以下要求处理上述内容：
       ${instruction}
@@ -224,24 +266,267 @@ export function EditorPage() {
       1. 直接输出处理后的内容，不要加任何说明
       2. 适合公众号阅读的风格
       3. 保持原文的核心观点和信息
+      4. 使用 Markdown 格式输出：标题用 # ## ###，加粗用 **文字**
+      5. 每个段落为连续文字，段落内不要换行，段落之间用空行分隔
+      6. 只输出优化后的内容，不要包含原文
+    ` : `
+      以下是原文内容：
+      ${contentToProcess.replace(/<[^>]*>/g, '\n')}
+
+      请根据以下要求处理上述内容：
+      ${instruction}
+
+      要求：
+      1. 直接输出处理后的内容，不要加任何说明
+      2. 适合公众号阅读的风格
+      3. 保持原文的核心观点和信息
+      4. 使用 Markdown 格式输出：标题用 # ## ###，加粗用 **文字**
+      5. 每个段落为连续文字，段落内不要换行，段落之间用空行分隔
+      6. 保持原文结构，不要改变主题
     `;
+
     try {
-      await handleGenerate(prompt, wordCount, (chunk) => {
-        if (editorRef.current) {
-          editorRef.current.appendContent(chunk);
+      let resultContent = '';
+      
+      if (hasSelection) {
+        // 选中文字模式：收集完整结果后替换
+        await handleGenerate(prompt, Math.max(100, selectedText.length * 2), (chunk) => {
+          resultContent += chunk;
+          setRefineProgress('正在优化选中内容...');
+        });
+        
+        // 替换选中内容
+        if (editorRef.current && resultContent.trim()) {
+          editorRef.current.replaceSelectedContent(markdownToHtml(resultContent));
         }
+      } else {
+        // 全文模式：清空编辑器，流式写入
+        editorRef.current?.clearContent();
+        
+        await handleGenerate(prompt, wordCount, (chunk) => {
+          if (!editorRef.current) return;
+          resultContent += chunk;
+          setRefineProgress('正在优化全文...');
+          
+          // 按段落分隔 flush
+          const parts = resultContent.split('\n\n');
+          resultContent = parts.pop() || '';
+          for (const part of parts) {
+            if (part.trim()) {
+              editorRef.current.appendContent(markdownToHtml(part + '\n\n'));
+            }
+          }
+        });
+        
+        // flush 剩余内容
+        if (resultContent.trim() && editorRef.current) {
+          editorRef.current.appendContent(markdownToHtml(resultContent));
+        }
+      }
+      
+      // 处理完成
+      setRefineProgress('');
+      setIsRefining(false);
+      toast.success('优化完成', {
+        description: '可以使用 Ctrl+Z 撤销此次操作',
       });
     } catch (error) {
       // 恢复编辑器内容
-      const editor = editorRef.current?.getEditor();
       if (editor) {
         editor.commands.setContent(previousContent);
       }
       setContent(previousContent);
+      setRefineProgress('');
+      setIsRefining(false);
       const errorMessage = error instanceof Error ? error.message : 'AI 处理失败，请稍后重试';
       toast.error('处理失败', { description: errorMessage });
     }
   }, [wordCount, handleGenerate]);
+
+  // 撤销快捷操作
+  const handleUndoRefine = useCallback(() => {
+    if (!lastRefinedContent) {
+      toast.info('没有可撤销的操作');
+      return;
+    }
+    
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      editor.commands.setContent(lastRefinedContent);
+      setContent(lastRefinedContent);
+      setLastRefinedContent(null);
+      toast.success('已撤销优化操作');
+    }
+  }, [lastRefinedContent]);
+
+  // 去AI味功能（增量优化）
+  const onRemoveAIFlavor = useCallback(async () => {
+    const editor = editorRef.current?.getEditor();
+    if (!editor) return;
+
+    const selectionInfo = editorRef.current?.getSelectionInfo();
+    const hasSelection = selectionInfo && !selectionInfo.empty;
+    const selectedText = hasSelection ? editorRef.current?.getSelectedText() || '' : '';
+    const fullContent = editor.getHTML() || content;
+
+    if (!fullContent.trim()) {
+      toast.error('请先写点内容');
+      return;
+    }
+
+    setIsRefining(true);
+    setRefineProgress('正在去除AI痕迹...');
+
+    // 保存用于撤销
+    const previousContent = fullContent;
+    setLastRefinedContent(previousContent);
+
+    const instruction = `优化以下内容，去除AI痕迹，使其读起来更自然、更有人味，像真人写的一样。
+    注意：
+    1. 保留核心内容和观点
+    2. 保持段落结构
+    3. 使用更口语化、自然的表达
+    4. 避免过度修饰和套话
+    5. 让语言更有温度和个性`;
+
+    try {
+      let resultContent = '';
+
+      if (hasSelection && selectedText) {
+        // 选中文字模式
+        const prompt = `
+          以下是需要优化的选中内容：
+          ${selectedText}
+
+          ${instruction}
+
+          要求：直接输出优化后的内容，不要加任何说明。
+        `;
+        
+        await handleGenerate(prompt, Math.max(100, selectedText.length * 2), (chunk) => {
+          resultContent += chunk;
+          setRefineProgress('正在优化选中内容...');
+        });
+
+        if (editorRef.current && resultContent.trim()) {
+          editorRef.current.replaceSelectedContent(markdownToHtml(resultContent));
+        }
+      } else {
+        // 全文模式：增量优化
+        const textContent = fullContent.replace(/<[^>]*>/g, '\n').trim();
+        const prompt = `
+          以下是原文内容：
+          ${textContent}
+
+          ${instruction}
+
+          要求：
+          1. 直接输出优化后的内容，不要加任何说明
+          2. 使用 Markdown 格式输出
+          3. 保持原文结构，不要改变主题
+          4. 每个段落为连续文字，段落内不要换行
+        `;
+
+        editorRef.current?.clearContent();
+
+        await handleGenerate(prompt, wordCount, (chunk) => {
+          if (!editorRef.current) return;
+          resultContent += chunk;
+          setRefineProgress('正在去除AI痕迹...');
+
+          const parts = resultContent.split('\n\n');
+          resultContent = parts.pop() || '';
+          for (const part of parts) {
+            if (part.trim()) {
+              editorRef.current.appendContent(markdownToHtml(part + '\n\n'));
+            }
+          }
+        });
+
+        if (resultContent.trim() && editorRef.current) {
+          editorRef.current.appendContent(markdownToHtml(resultContent));
+        }
+      }
+
+      setRefineProgress('');
+      setIsRefining(false);
+      toast.success('去AI味完成', {
+        description: '文章已优化，可以使用 Ctrl+Z 撤销',
+      });
+    } catch (error) {
+      // 恢复
+      if (editor) {
+        editor.commands.setContent(previousContent);
+      }
+      setContent(previousContent);
+      setRefineProgress('');
+      setIsRefining(false);
+      const errorMessage = error instanceof Error ? error.message : '处理失败，请稍后重试';
+      toast.error('处理失败', { description: errorMessage });
+    }
+  }, [content, wordCount, handleGenerate]);
+
+  // 生成摘要功能
+  const onGenerateSummary = useCallback(async () => {
+    const editor = editorRef.current?.getEditor();
+    if (!editor) return;
+
+    const fullContent = editor.getHTML() || content;
+    if (!fullContent.trim()) {
+      toast.error('请先写点内容');
+      return;
+    }
+
+    setIsRefining(true);
+    setRefineProgress('正在生成摘要...');
+
+    const textContent = fullContent.replace(/<[^>]*>/g, '\n').trim();
+    const prompt = `
+      以下是文章内容：
+      ${textContent}
+
+      请为这篇文章生成一个简洁的摘要，要求：
+      1. 100-150字以内
+      2. 突出文章的核心观点和亮点
+      3. 适合公众号文章开头的导读
+      4. 语言简洁有力，吸引读者继续阅读
+      5. 直接输出摘要内容，不要加任何说明
+    `;
+
+    try {
+      let summary = '';
+      await handleGenerate(prompt, 200, (chunk) => {
+        summary += chunk;
+        setRefineProgress('正在生成摘要...');
+      });
+
+      if (summary.trim()) {
+        // 插入摘要到文章开头
+        const summaryHtml = `
+          <blockquote style="border-left: 3px solid #10b981; padding: 12px 16px; margin: 16px 0; background: #f0fdf4; border-radius: 0 8px 8px 0;">
+            <p style="margin: 0; color: #166534; font-size: 14px; line-height: 1.6;">
+              <strong>【摘要】</strong>${summary.trim()}
+            </p>
+          </blockquote>
+        `;
+        
+        // 在文章开头插入摘要
+        const endOfFirstParagraph = fullContent.indexOf('</p>') + 4;
+        const insertPos = endOfFirstParagraph > 4 ? endOfFirstParagraph : 0;
+        
+        editorRef.current?.insertContentAtPosition(insertPos, summaryHtml);
+        
+        setRefineProgress('');
+        setIsRefining(false);
+        toast.success('摘要已生成并插入到文章开头');
+      }
+    } catch (error) {
+      setRefineProgress('');
+      setIsRefining(false);
+      const errorMessage = error instanceof Error ? error.message : '生成摘要失败，请稍后重试';
+      toast.error('生成摘要失败', { description: errorMessage });
+    }
+  }, [content, handleGenerate]);
 
   const onGenerateImage = async () => {
     try {
@@ -390,6 +675,7 @@ export function EditorPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
             <RichTextEditor
+              key={currentArticle?.id || 'new'}
               ref={editorRef}
               content={content}
               onChange={setContent}
@@ -550,13 +836,35 @@ export function EditorPage() {
 
               {/* 快捷操作 */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">快捷操作</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">快捷操作</Label>
+                  {lastRefinedContent && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={handleUndoRefine}
+                    >
+                      <Undo2 className="mr-1 h-3 w-3" /> 撤销
+                    </Button>
+                  )}
+                </div>
+                
+                {/* 进度提示 */}
+                {isRefining && (
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                    <span className="text-xs text-blue-700 dark:text-blue-300">{refineProgress}</span>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
                     className="text-xs justify-start"
-                    onClick={() => onRefineContent('优化以下文章，去除AI痕迹，使其读起来更自然、更有人味，像真人写的一样')}
+                    onClick={onRemoveAIFlavor}
+                    disabled={isRefining || isGenerating}
                   >
                     <Sparkles className="mr-1 h-3 w-3" /> 去AI味
                   </Button>
@@ -564,7 +872,8 @@ export function EditorPage() {
                     variant="outline"
                     size="sm"
                     className="text-xs justify-start"
-                    onClick={() => onRefineContent('为以下文章生成一个简洁的摘要，100字以内，突出核心观点')}
+                    onClick={onGenerateSummary}
+                    disabled={isRefining || isGenerating}
                   >
                     <AlignLeft className="mr-1 h-3 w-3" /> 生成摘要
                   </Button>
@@ -578,6 +887,11 @@ export function EditorPage() {
                   </Button>
                   <WritingTemplates onInsert={handleInsertTemplate} />
                 </div>
+                
+                {/* 选中文字提示 */}
+                <p className="text-[10px] text-muted-foreground">
+                  提示：选中文字后点击操作，仅优化选中内容
+                </p>
               </div>
             </TabsContent>
 

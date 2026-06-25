@@ -99,7 +99,8 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
       id: `custom-${Date.now()}`,
       name: '自定义模板',
       description: '通过可视化编辑器创建',
-      icon: '🎨',
+      icon: '',
+      category: '简约',
       preview: config.accentColor,
       styles: {
         body: {

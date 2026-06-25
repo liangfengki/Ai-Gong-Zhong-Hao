@@ -89,6 +89,7 @@ export interface UserSettings {
   darkMode: boolean;
   followSystemTheme: boolean;
   favoriteTopics: string[];
+  aiModelMode?: 'default' | 'custom';
 }
 
 // 文档类型

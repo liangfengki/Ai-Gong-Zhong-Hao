@@ -16,16 +16,18 @@ async function getHotSource(source, req, res) {
   }
 
   try {
-    const cached = cache.get(`hot:${source}`);
-    if (cached) {
+    // 优先返回新鲜缓存
+    const cached = cache.getWithStale(`hot:${source}`);
+    if (cached && cached.fresh) {
       return res.json({ 
-        data: cached,
+        data: cached.data,
         requestId: req.id,
         source,
         cached: true,
       });
     }
 
+    // 尝试实时获取
     const hotData = await fetchHotData(source);
     const formattedData = hotData
       ? hotData.map((item, index) => ({
@@ -38,16 +40,38 @@ async function getHotSource(source, req, res) {
           author: item.author || '',
           source,
         }))
-      : getMockData(source);
+      : null;
 
-    cache.set(`hot:${source}`, formattedData);
-    
+    if (formattedData) {
+      cache.set(`hot:${source}`, formattedData);
+      return res.json({ 
+        data: formattedData,
+        requestId: req.id,
+        source,
+        cached: false,
+        count: formattedData.length,
+      });
+    }
+
+    // 实时获取失败，使用 stale 缓存
+    if (cached) {
+      return res.json({
+        data: cached.data,
+        requestId: req.id,
+        source,
+        stale: true,
+        error: '实时数据获取失败，显示缓存数据',
+      });
+    }
+
+    // 无缓存，返回 mock 数据
+    const mockData = getMockData(source);
     res.json({ 
-      data: formattedData,
+      data: mockData,
       requestId: req.id,
       source,
-      cached: false,
-      count: formattedData.length,
+      mock: true,
+      error: '获取热点数据失败，显示示例数据',
     });
   } catch (error) {
     console.error(`获取${source}热搜失败:`, {
@@ -56,14 +80,25 @@ async function getHotSource(source, req, res) {
       error: error.message,
     });
     
+    // 异常时尝试 stale 缓存
+    const cached = cache.getWithStale(`hot:${source}`);
+    if (cached) {
+      return res.json({
+        data: cached.data,
+        requestId: req.id,
+        source,
+        stale: true,
+        error: '数据获取异常，显示缓存数据',
+      });
+    }
+
     const mockData = getMockData(source);
     res.json({ 
       data: mockData,
       requestId: req.id,
       source,
-      cached: false,
       mock: true,
-      error: '获取热点数据失败，显示模拟数据',
+      error: '获取热点数据失败，显示示例数据',
     });
   }
 }
@@ -79,8 +114,11 @@ router.get('/bilibili/hot', (req, res) => getHotSource('bilibili', req, res));
 // 所有热点并行获取
 router.get('/hot/all', async (req, res) => {
   try {
-    const cached = cache.get('hot:all');
-    if (cached) return res.json({ data: cached, requestId: req.id, cached: true });
+    // 优先返回新鲜缓存
+    const cached = cache.getWithStale('hot:all');
+    if (cached && cached.fresh) {
+      return res.json({ data: cached.data, requestId: req.id, cached: true });
+    }
 
     const promises = VALID_SOURCES.map(source =>
       fetchHotData(source).then(data => ({ source, data: data || [] }))
@@ -88,31 +126,71 @@ router.get('/hot/all', async (req, res) => {
 
     const results = await Promise.allSettled(promises);
     const hotData = {};
+    let hasData = false;
 
     results.forEach(result => {
       if (result.status === 'fulfilled') {
         const { source, data } = result.value;
-        hotData[source] = data.map((item, index) => ({
-          title: item.title,
-          hot: item.hot || 0,
-          url: item.url || item.mobileUrl || `https://www.baidu.com/s?wd=${encodeURIComponent(item.title)}`,
-          index: index + 1,
-          desc: item.desc || '',
-          img: item.cover || '',
-          author: item.author || '',
-          source,
-        }));
+        if (data.length > 0) {
+          hasData = true;
+          hotData[source] = data.map((item, index) => ({
+            title: item.title,
+            hot: item.hot || 0,
+            url: item.url || item.mobileUrl || `https://www.baidu.com/s?wd=${encodeURIComponent(item.title)}`,
+            index: index + 1,
+            desc: item.desc || '',
+            img: item.cover || '',
+            author: item.author || '',
+            source,
+          }));
+        }
       }
     });
 
-    cache.set('hot:all', hotData);
+    if (hasData) {
+      cache.set('hot:all', hotData);
+      return res.json({
+        data: hotData,
+        requestId: req.id,
+        cached: false,
+      });
+    }
+
+    // 实时获取失败，使用 stale 缓存
+    if (cached) {
+      return res.json({
+        data: cached.data,
+        requestId: req.id,
+        stale: true,
+        error: '实时数据获取失败，显示缓存数据',
+      });
+    }
+
+    // 无缓存，返回 mock
+    const mockData = {};
+    VALID_SOURCES.forEach(source => {
+      mockData[source] = getMockData(source);
+    });
     res.json({
-      data: hotData,
+      data: mockData,
       requestId: req.id,
-      cached: false,
+      mock: true,
+      error: '获取热点数据失败，显示示例数据',
     });
   } catch (error) {
     console.error('获取所有热点失败:', error.message);
+    
+    // 异常时尝试 stale 缓存
+    const cached = cache.getWithStale('hot:all');
+    if (cached) {
+      return res.json({
+        data: cached.data,
+        requestId: req.id,
+        stale: true,
+        error: '数据获取异常，显示缓存数据',
+      });
+    }
+
     res.status(500).json({ error: '获取热点数据失败', requestId: req.id });
   }
 });

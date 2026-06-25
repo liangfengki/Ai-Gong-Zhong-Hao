@@ -170,7 +170,7 @@ export async function generateArticleStream({ prompt, wordCount, apiKey, baseUrl
 }
 
 // 生成图片
-export async function generateImage({ prompt, size, apiKey, baseUrl }) {
+export async function generateImage({ prompt, size, apiKey, baseUrl, model }) {
   if (!apiKey) {
     throw new Error('未配置 API Key，请在设置页或 server/.env 中配置');
   }
@@ -178,7 +178,7 @@ export async function generateImage({ prompt, size, apiKey, baseUrl }) {
   const response = await axios.post(
     `${baseUrl.replace(/\/v1$/, '')}/v1/images/generations`,
     {
-      model: 'dall-e-3',
+      model: model || 'agnes-image-2.0-flash',
       prompt,
       n: 1,
       size: size || '1024x1024',
@@ -193,4 +193,158 @@ export async function generateImage({ prompt, size, apiKey, baseUrl }) {
   );
 
   return response.data.data[0].url;
+}
+
+// 创建视频生成任务
+export async function createVideoTask({ prompt, apiKey, baseUrl, model, image }) {
+  if (!apiKey) {
+    throw new Error('未配置 API Key，请在设置页或 server/.env 中配置');
+  }
+
+  const requestBody = {
+    model: model || 'agnes-video-v2.0',
+    prompt,
+  };
+
+  if (image) {
+    requestBody.image = Array.isArray(image) ? image : [image];
+  }
+
+  const response = await axios.post(
+    `${baseUrl}/video/generations`,
+    requestBody,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 60000,
+    }
+  );
+
+  return response.data; // 返回任务信息，包含 task_id 或 id
+}
+
+// 查询视频任务状态
+export async function getVideoStatus({ taskId, apiKey, baseUrl }) {
+  if (!apiKey) {
+    throw new Error('未配置 API Key');
+  }
+
+  const response = await axios.get(
+    `${baseUrl}/video/generations/${taskId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 30000,
+    }
+  );
+
+  return response.data;
+}
+
+// 文章智能分析
+export async function analyzeContent({ title, content, apiKey, baseUrl, model }) {
+  if (!apiKey) {
+    throw new Error('未配置 API Key，请在设置页或 server/.env 中配置');
+  }
+
+  const analysisPrompt = `你是一个专业的公众号文章分析专家。请对以下文章进行深度分析，并以严格的JSON格式返回分析结果。
+
+【文章标题】
+${title}
+
+【文章内容】
+${content}
+
+请按照以下维度进行分析，并返回JSON格式的结果（不要包含任何其他文字，只返回JSON）：
+
+{
+  "qualityScore": <0-100的整数，综合内容质量评分>,
+  "seo": {
+    "titleSuggestion": "<标题优化建议>",
+    "keywords": ["<推荐关键词1>", "<推荐关键词2>", "<推荐关键词3>"],
+    "description": "<建议的SEO描述，50-100字>",
+    "score": <0-100的SEO评分>
+  },
+  "readability": {
+    "paragraphStructure": "<段落结构评价>",
+    "avgSentenceLength": "<平均句子长度评价，如：适中/偏长/偏短>",
+    "vocabularyDiversity": "<词汇多样性评价>",
+    "score": <0-100的可读性评分>
+  },
+  "sentiment": {
+    "tendency": "<情感倾向：积极/中性/消极>",
+    "intensity": "<情感强度：强/中/弱>",
+    "description": "<情感分析简述>"
+  },
+  "improvements": [
+    "<改进建议1>",
+    "<改进建议2>",
+    "<改进建议3>",
+    "<改进建议4>",
+    "<改进建议5>"
+  ]
+}
+
+评分标准：
+- 质量评分：综合考虑内容深度、逻辑性、原创性、实用性
+- SEO评分：考虑标题吸引力、关键词密度、描述准确性
+- 可读性评分：考虑段落长度、句子复杂度、专业术语使用
+- 改进建议：提供具体、可操作的优化建议`;
+
+  const response = await axios.post(
+    `${baseUrl}/chat/completions`,
+    {
+      model,
+      messages: [
+        { role: 'system', content: '你是一个专业的文章分析AI，只返回JSON格式的分析结果，不要包含任何其他文字。' },
+        { role: 'user', content: analysisPrompt },
+      ],
+      max_tokens: 2000,
+      temperature: 0.3, // 低温度以获得更稳定的JSON输出
+      response_format: { type: 'json_object' },
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 120000, // 2 分钟超时
+    }
+  );
+
+  const responseContent = response.data.choices[0].message.content;
+  
+  try {
+    // 解析AI返回的JSON
+    const analysis = JSON.parse(responseContent);
+    
+    // 验证并规范化返回结果
+    return {
+      qualityScore: Math.min(100, Math.max(0, analysis.qualityScore || 0)),
+      seo: {
+        titleSuggestion: analysis.seo?.titleSuggestion || '',
+        keywords: Array.isArray(analysis.seo?.keywords) ? analysis.seo.keywords.slice(0, 5) : [],
+        description: analysis.seo?.description || '',
+        score: Math.min(100, Math.max(0, analysis.seo?.score || 0)),
+      },
+      readability: {
+        paragraphStructure: analysis.readability?.paragraphStructure || '',
+        avgSentenceLength: analysis.readability?.avgSentenceLength || '未知',
+        vocabularyDiversity: analysis.readability?.vocabularyDiversity || '',
+        score: Math.min(100, Math.max(0, analysis.readability?.score || 0)),
+      },
+      sentiment: {
+        tendency: analysis.sentiment?.tendency || '中性',
+        intensity: analysis.sentiment?.intensity || '中',
+        description: analysis.sentiment?.description || '',
+      },
+      improvements: Array.isArray(analysis.improvements) ? analysis.improvements.slice(0, 10) : [],
+    };
+  } catch (parseError) {
+    console.error('AI分析结果解析失败:', parseError.message);
+    throw new Error('AI分析结果格式异常，请重试');
+  }
 }

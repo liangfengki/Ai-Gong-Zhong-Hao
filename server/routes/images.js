@@ -16,7 +16,16 @@ function proxyUrl(rawUrl) {
   return `/api/img-proxy?url=${encodeURIComponent(rawUrl)}`;
 }
 
-// Unsplash 搜索（有 API Key 走官方 API，否则用 Lorem Picsum 兜底）
+// 生成 Loremflickr 图片数组（基于关键词，通过 lock 参数保证稳定结果）
+function generateLoremflickrImages(query, width, height, count, page) {
+  return Array.from({ length: count }, (_, i) => {
+    const lock = (page - 1) * count + i;
+    const rawUrl = `https://loremflickr.com/${width}/${height}/${encodeURIComponent(query)}?lock=${lock}`;
+    return { rawUrl, lock };
+  });
+}
+
+// Unsplash 搜索（有 API Key 走官方 API，否则用 Loremflickr 关键词搜索兜底）
 router.get('/unsplash/search', imageValidation.search, async (req, res) => {
   try {
     const { query, page = 1, orientation } = req.query;
@@ -24,27 +33,24 @@ router.get('/unsplash/search', imageValidation.search, async (req, res) => {
     const accessKey = process.env.UNSPLASH_ACCESS_KEY;
 
     if (!accessKey) {
-      const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: pp }, (_, i) => {
-        const seed = `${encodedQuery}-${page}-${i}`;
-        const regularUrl = `https://picsum.photos/seed/${seed}/800/600`;
-        const thumbUrl = `https://picsum.photos/seed/${seed}/200/150`;
-        const downloadUrl = `https://picsum.photos/seed/${seed}/1920/1080`;
-        return {
-          id: `picsum-${page}-${i}`,
-          urls: {
-            regular: proxyUrl(regularUrl),
-            thumb: proxyUrl(thumbUrl),
-          },
-          alt_description: `${query} ${i + 1}`,
-          user: { name: 'Lorem Picsum' },
-          links: { download: proxyUrl(downloadUrl) },
-        };
-      });
+      const fallbackQuery = query || 'nature';
+      const flickrItems = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrThumbs = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
+      const flickrDownloads = generateLoremflickrImages(fallbackQuery, 1920, 1080, pp, parseInt(page));
+      const images = flickrItems.map((item, i) => ({
+        id: `loremflickr-${page}-${i}`,
+        urls: {
+          regular: proxyUrl(item.rawUrl),
+          thumb: proxyUrl(flickrThumbs[i].rawUrl),
+        },
+        alt_description: `${fallbackQuery} ${i + 1}`,
+        user: { name: 'Lorem Flickr' },
+        links: { download: proxyUrl(flickrDownloads[i].rawUrl) },
+      }));
       return res.json({
         results: images,
         requestId: req.id,
-        source: 'picsum-fallback',
+        source: 'loremflickr-fallback',
       });
     }
 
@@ -81,24 +87,24 @@ router.get('/pexels/search', imageValidation.search, async (req, res) => {
     const apiKey = process.env.PEXELS_API_KEY;
 
     if (!apiKey) {
-      const encodedQuery = encodeURIComponent(query || 'nature');
-      const images = Array.from({ length: pp }, (_, i) => {
-        const seed = `pexels-${encodedQuery}-${page}-${i}`;
-        return {
-          id: `picsum-pexels-${page}-${i}`,
-          src: {
-            original: proxyUrl(`https://picsum.photos/seed/${seed}/1920/1080`),
-            large: proxyUrl(`https://picsum.photos/seed/${seed}/800/600`),
-            medium: proxyUrl(`https://picsum.photos/seed/${seed}/200/150`),
-          },
-          alt: `${query} ${i + 1}`,
-          photographer: 'Lorem Picsum',
-        };
-      });
+      const fallbackQuery = query || 'nature';
+      const flickrOriginals = generateLoremflickrImages(fallbackQuery, 1920, 1080, pp, parseInt(page));
+      const flickrLarges = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrMediums = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
+      const images = flickrOriginals.map((item, i) => ({
+        id: `loremflickr-pexels-${page}-${i}`,
+        src: {
+          original: proxyUrl(item.rawUrl),
+          large: proxyUrl(flickrLarges[i].rawUrl),
+          medium: proxyUrl(flickrMediums[i].rawUrl),
+        },
+        alt: `${fallbackQuery} ${i + 1}`,
+        photographer: 'Lorem Flickr',
+      }));
       return res.json({
         photos: images,
         requestId: req.id,
-        source: 'picsum-fallback',
+        source: 'loremflickr-fallback',
       });
     }
 
@@ -135,21 +141,20 @@ router.get('/pixabay/search', imageValidation.search, async (req, res) => {
     const apiKey = process.env.PIXABAY_API_KEY;
 
     if (!apiKey) {
-      const encodedQuery = encodeURIComponent(q || 'nature');
-      const images = Array.from({ length: pp }, (_, i) => {
-        const seed = `pixabay-${encodedQuery}-${page}-${i}`;
-        return {
-          id: `picsum-pixabay-${page}-${i}`,
-          largeImageURL: proxyUrl(`https://picsum.photos/seed/${seed}/800/600`),
-          previewURL: proxyUrl(`https://picsum.photos/seed/${seed}/200/150`),
-          tags: `${q || 'nature'} ${i + 1}`,
-          user: 'Lorem Picsum',
-        };
-      });
+      const fallbackQuery = q || 'nature';
+      const flickrLarges = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrPreviews = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
+      const images = flickrLarges.map((item, i) => ({
+        id: `loremflickr-pixabay-${page}-${i}`,
+        largeImageURL: proxyUrl(item.rawUrl),
+        previewURL: proxyUrl(flickrPreviews[i].rawUrl),
+        tags: `${fallbackQuery} ${i + 1}`,
+        user: 'Lorem Flickr',
+      }));
       return res.json({
         hits: images,
         requestId: req.id,
-        source: 'picsum-fallback',
+        source: 'loremflickr-fallback',
       });
     }
 
@@ -185,9 +190,9 @@ router.get('/img-proxy', async (req, res) => {
       return res.status(400).json({ error: '缺少 url 参数' });
     }
 
-    // 只允许代理 picsum.photos（安全白名单）
+    // 只允许代理白名单域名（安全白名单）
     const parsed = new URL(url);
-    if (!['picsum.photos', 'i.picsum.photos', 'fastly.picsum.photos'].includes(parsed.hostname)) {
+    if (!['picsum.photos', 'i.picsum.photos', 'fastly.picsum.photos', 'loremflickr.com', 'live.staticflickr.com'].includes(parsed.hostname)) {
       return res.status(403).json({ error: '不允许代理此域名' });
     }
 

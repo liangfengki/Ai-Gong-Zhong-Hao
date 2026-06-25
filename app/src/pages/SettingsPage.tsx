@@ -63,56 +63,56 @@ const PROVIDER_PRESETS: AIProviderPreset[] = [
     name: 'Kimi (月之暗面)',
     baseUrl: 'https://api.moonshot.cn/v1',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-    icon: '🌙',
+    icon: '',
   },
   {
     id: 'qwen',
     name: '通义千问',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     models: ['qwen-turbo', 'qwen-plus', 'qwen-max', 'qwen-long', 'qwen-vl-plus'],
-    icon: '☁️',
+    icon: '',
   },
   {
     id: 'zhipu',
     name: '智谱 (GLM)',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     models: ['glm-4-flash', 'glm-4', 'glm-4-plus', 'glm-4v'],
-    icon: '💎',
+    icon: '',
   },
   {
     id: 'baichuan',
     name: '百川智能',
     baseUrl: 'https://api.baichuan-ai.com/v1',
     models: ['Baichuan4', 'Baichuan3-Turbo', 'Baichuan2-Turbo'],
-    icon: '🏔️',
+    icon: '',
   },
   {
     id: 'yi',
     name: '零一万物 (Yi)',
     baseUrl: 'https://api.lingyiwanwu.com/v1',
     models: ['yi-lightning', 'yi-large', 'yi-medium', 'yi-spark'],
-    icon: '⚡',
+    icon: '',
   },
   {
     id: 'openrouter',
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     models: ['anthropic/claude-3.5-sonnet', 'google/gemini-pro-1.5', 'meta-llama/llama-3.1-405b-instruct', 'mistralai/mixtral-8x22b-instruct'],
-    icon: '🔀',
+    icon: '',
   },
   {
     id: 'siliconflow',
     name: '硅基流动',
     baseUrl: 'https://api.siliconflow.cn/v1',
     models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Meta-Llama-3.1-405B-Instruct'],
-    icon: '🌊',
+    icon: '',
   },
   {
     id: 'custom',
     name: '自定义',
     baseUrl: '',
     models: [],
-    icon: '⚙️',
+    icon: '',
   },
 ];
 
@@ -142,6 +142,8 @@ export function SettingsPage() {
     const matched = PROVIDER_PRESETS.find(p => p.baseUrl === settings.ai.baseUrl);
     return matched?.id || 'custom';
   }, [settings.ai.baseUrl]);
+
+  const isDefaultMode = useMemo(() => settings.aiModelMode !== 'custom', [settings.aiModelMode]);
 
   const currentProvider = PROVIDER_PRESETS.find(p => p.id === selectedProvider);
   const availableModels = currentProvider?.models || [];
@@ -285,12 +287,73 @@ export function SettingsPage() {
 
         {/* ============ AI 配置 ============ */}
         <TabsContent value="ai">
-          <Card>
-            <CardHeader>
-              <CardTitle>语言模型 (LLM)</CardTitle>
-              <CardDescription>配置聊天、写作等语言模型的 API</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          {isDefaultMode ? (
+            /* ---- 默认模式：简化卡片 ---- */
+            <Card>
+              <CardHeader>
+                <CardTitle>AI 模型</CardTitle>
+                <CardDescription>当前使用默认模型 (Agnes AI)，开箱即用无需配置</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* 绿色状态提示 */}
+                <div className="flex items-center gap-3 p-4 rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+                  <p className="text-sm text-green-800 dark:text-green-300 font-medium">
+                    默认模型已启用 - Agnes AI (agnes-2.0-flash)
+                  </p>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" onClick={handleTestConnection} disabled={isTesting}>
+                    {isTesting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : testResult === 'success' ? (
+                      <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+                    ) : testResult === 'error' ? (
+                      <AlertCircle className="mr-2 h-4 w-4 text-red-500" />
+                    ) : (
+                      <Zap className="mr-2 h-4 w-4" />
+                    )}
+                    测试连接
+                  </Button>
+                  {testResult === 'success' && <Badge variant="default" className="bg-green-500">连接正常</Badge>}
+                  {testResult === 'error' && <Badge variant="destructive">连接失败</Badge>}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto text-muted-foreground"
+                    onClick={() => updateSettings({ aiModelMode: 'custom' })}
+                  >
+                    切换到自定义模型
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            /* ---- 自定义模式：完整配置界面 ---- */
+            <Card>
+              <CardHeader>
+                <CardTitle>语言模型 (LLM)</CardTitle>
+                <CardDescription>配置聊天、写作等语言模型的 API</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* 自定义模式提示 */}
+                <div className="flex items-center gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+                  <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <p className="text-sm text-blue-800 dark:text-blue-300">
+                    已切换到自定义模式
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto text-blue-600 dark:text-blue-400"
+                    onClick={() => updateSettings({ aiModelMode: 'default' })}
+                  >
+                    切换回默认模型
+                  </Button>
+                </div>
+
               {/* Quick Setup - 提供商选择 */}
               <div className="space-y-3">
                 <Label>Quick Setup · 选择服务商</Label>
@@ -468,6 +531,7 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         {/* ============ 排版模板 ============ */}
