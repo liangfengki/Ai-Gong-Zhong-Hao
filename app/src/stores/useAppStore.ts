@@ -19,6 +19,11 @@ interface AppStore {
   // UI状态
   sidebarOpen: boolean;
 
+  // 待插入编辑器的图片队列（跨页面传递用，不持久化）
+  pendingImageInserts: Array<{ url: string; alt: string }>;
+  addPendingImageInsert: (image: { url: string; alt: string }) => void;
+  clearPendingImageInserts: () => void;
+
   // Actions
   setCurrentArticle: (article: Article | null) => void;
   loadArticle: (id: string) => Article | null;
@@ -74,6 +79,7 @@ export const useAppStore = create<AppStore>()(
       articleVersions: [],
       settings: defaultSettings,
       sidebarOpen: true,
+      pendingImageInserts: [],
 
       // Actions
       setCurrentArticle: (article) => set({ currentArticle: article }),
@@ -173,6 +179,12 @@ export const useAppStore = create<AppStore>()(
       }),
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+      addPendingImageInsert: (image) => set((state) => ({
+        pendingImageInserts: [...state.pendingImageInserts, image],
+      })),
+
+      clearPendingImageInserts: () => set({ pendingImageInserts: [] }),
 
       exportData: () => {
         const state = get();

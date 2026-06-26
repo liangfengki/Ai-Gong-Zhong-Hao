@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAppStore } from '@/stores/useAppStore';
 import './RichTextEditor.css';
 
 export interface RichTextEditorHandle {
@@ -400,23 +401,19 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     };
   }, [editor]);
 
-  // 监听自定义事件，从图片素材库插入图片
+  // 从 store 消费待插入的图片（跨页面传递，如从图片素材库发送过来的图片）
   useEffect(() => {
     if (!editor) return;
+    const { pendingImageInserts, clearPendingImageInserts } = useAppStore.getState();
+    if (pendingImageInserts.length === 0) return;
 
-    const handleInsertImageEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<{ url: string; alt: string }>;
-      const { url, alt } = customEvent.detail;
-      if (url) {
+    // 延迟一帧确保编辑器完全就绪
+    requestAnimationFrame(() => {
+      pendingImageInserts.forEach(({ url, alt }) => {
         editor.chain().focus().setImage({ src: url, alt: alt || '' }).run();
-      }
-    };
-
-    window.addEventListener('insertImageToEditor', handleInsertImageEvent);
-    
-    return () => {
-      window.removeEventListener('insertImageToEditor', handleInsertImageEvent);
-    };
+      });
+      clearPendingImageInserts();
+    });
   }, [editor]);
 
   // 通知父组件 editor 已就绪

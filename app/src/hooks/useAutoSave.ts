@@ -55,7 +55,11 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
     timerRef.current = setTimeout(() => doSave(title, content, wordCount), 3000);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        // 卸载前立即保存，防止防抖窗口期内的修改丢失
+        doSave(title, content, wordCount);
+      }
     };
   }, [title, content, wordCount, doSave]);
 

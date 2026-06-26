@@ -27,6 +27,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { searchAllImages } from '@/services/api';
+import { useAppStore } from '@/stores/useAppStore';
 import type { ImageAsset } from '@/types';
 
 const sourceColors: Record<string, string> = {
@@ -162,17 +163,10 @@ export function ImageLibraryPage() {
   };
 
   const handleInsertToEditor = (image: ImageAsset) => {
-    // 通过自定义事件将图片信息发送到编辑器页面
-    const event = new CustomEvent('insertImageToEditor', {
-      detail: {
-        url: image.url,
-        alt: image.alt,
-      },
-    });
-    window.dispatchEvent(event);
-    
+    // 通过 store 传递图片到编辑器（CustomEvent 在编辑器卸载时无法工作）
+    useAppStore.getState().addPendingImageInsert({ url: image.url, alt: image.alt });
     toast.success('图片已发送到编辑器', {
-      description: '请切换到编辑器页面查看',
+      description: '切回编辑器后图片将自动插入',
     });
   };
 
