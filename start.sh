@@ -1,6 +1,6 @@
 #!/bin/bash
 # AI公众号写作助手 - 一键启动脚本
-# 启动3个服务：DailyHotApi(6688) → Server(6356) → Frontend(5173)
+# 启动3个服务：DailyHotApi(6688) → Server(6356) → Frontend(7658)
 
 set -e
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -46,14 +46,14 @@ SERVER_PID=$!
 sleep 2
 
 # 检查 Server
-if curl -s http://localhost:6356/baidu/hot > /dev/null 2>&1; then
+if curl -s http://localhost:6356/health > /dev/null 2>&1; then
   echo -e "${GREEN}✅ 后端服务启动成功${NC}"
 else
   echo -e "${RED}⚠️  后端服务启动失败${NC}"
 fi
 
 # 3. 启动 Frontend
-echo -e "${YELLOW}[3/3] 启动前端服务 (端口 5173)...${NC}"
+echo -e "${YELLOW}[3/3] 启动前端服务 (端口 7658)...${NC}"
 cd "$PROJECT_DIR/app"
 npm run dev &
 FRONTEND_PID=$!
@@ -63,7 +63,7 @@ echo ""
 echo "=================================="
 echo -e "${GREEN}🎉 所有服务已启动！${NC}"
 echo ""
-echo "  📝 前端地址:    http://localhost:5173"
+echo "  📝 前端地址:    http://localhost:7658"
 echo "  🔧 后端地址:    http://localhost:6356"
 echo "  🔥 热点API:     http://localhost:6688"
 echo ""

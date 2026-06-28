@@ -112,9 +112,11 @@ export function DashboardPage() {
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
-              <Card 
+              <button
                 key={action.title}
-                className="cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                type="button"
+                className="rounded-xl border bg-card py-6 text-left text-card-foreground shadow-sm transition-all hover:scale-[1.02] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-label={`${action.title}：${action.description}`}
                 onClick={() => navigate(action.path)}
               >
                 <CardContent className="p-6">
@@ -124,7 +126,7 @@ export function DashboardPage() {
                   <h3 className="font-semibold">{action.title}</h3>
                   <p className="text-sm text-muted-foreground">{action.description}</p>
                 </CardContent>
-              </Card>
+              </button>
             );
           })}
         </div>
@@ -156,9 +158,11 @@ export function DashboardPage() {
                   { step: 2, label: '浏览今日热点', desc: '寻找写作灵感', path: '/topics', done: hotTopics.length > 0 },
                   { step: 3, label: '开始写作', desc: '创建第一篇文章', path: '/editor', done: false },
                 ].map((item) => (
-                  <div
+                  <button
                     key={item.step}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-label={`${item.label}：${item.desc}`}
                     onClick={() => navigate(item.path)}
                   >
                     <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
@@ -171,15 +175,17 @@ export function DashboardPage() {
                       <p className="text-xs text-muted-foreground">{item.desc}</p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
               <div className="space-y-3">
                 {recentArticles.map((article) => (
-                  <div
+                  <button
                     key={article.id}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer"
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg border p-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-label={`打开文章：${article.title || '无标题'}`}
                     onClick={() => navigate('/editor', { state: { articleId: article.id } })}
                   >
                     <div className="flex-1 min-w-0">
@@ -195,7 +201,7 @@ export function DashboardPage() {
                       </div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -232,9 +238,11 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {todayTopics.map((topic, index) => (
-                  <div
+                  <button
                     key={topic.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
+                    type="button"
+                    aria-label={`用AI仿写热点：${topic.title}`}
+                    className="flex w-full items-center gap-3 rounded-lg border p-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => navigate('/editor', { state: { topic } })}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
@@ -254,7 +262,7 @@ export function DashboardPage() {
                       </div>
                     </div>
                     <Sparkles className="h-4 w-4 text-primary" />
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

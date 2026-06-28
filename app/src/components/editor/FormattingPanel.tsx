@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   Copy,
   Download,
@@ -23,6 +23,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -80,6 +81,8 @@ function TemplatePreviewCard({
       onClick={() => onApply(template)}
       onMouseEnter={() => onHoverStart(template)}
       onMouseLeave={onHoverEnd}
+      aria-label={`应用${template.name}排版模板`}
+      aria-pressed={isActive}
       className={`
         group relative flex flex-col overflow-hidden rounded-xl border-2
         text-left transition-all duration-200
@@ -152,27 +155,22 @@ function TemplatePreviewCard({
 /* ------------------------------------------------------------------ */
 
 export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<StyleTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<StyleTemplate | null>(() => {
+    try {
+      const savedId = localStorage.getItem(LAST_USED_KEY);
+      return savedId ? styleTemplates.find((t) => t.id === savedId) ?? null : null;
+    } catch {
+      return null;
+    }
+  });
   const [copied, setCopied] = useState(false);
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'all'>('all');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
+  const [canUndo, setCanUndo] = useState(false);
   const previousContentRef = useRef<string | null>(null);
   // Content snapshot before hover preview so we can restore it
   const preHoverContentRef = useRef<string | null>(null);
-
-  // Load last used template on mount
-  useEffect(() => {
-    try {
-      const savedId = localStorage.getItem(LAST_USED_KEY);
-      if (savedId) {
-        const found = styleTemplates.find((t) => t.id === savedId);
-        if (found) setSelectedTemplate(found);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   // Persist last-used template
   const persistLastUsed = useCallback((template: StyleTemplate) => {
@@ -200,6 +198,7 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
       }
 
       previousContentRef.current = content;
+      setCanUndo(true);
       setSelectedTemplate(template);
       persistLastUsed(template);
 
@@ -213,6 +212,7 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
             if (previousContentRef.current) {
               onApplyFormat(previousContentRef.current);
               previousContentRef.current = null;
+              setCanUndo(false);
               setSelectedTemplate(null);
               toast.success('已撤销排版');
             }
@@ -228,6 +228,7 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
     if (previousContentRef.current) {
       onApplyFormat(previousContentRef.current);
       previousContentRef.current = null;
+      setCanUndo(false);
       setSelectedTemplate(null);
       toast.success('已撤销排版');
     }
@@ -268,32 +269,30 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
   }, [content, selectedTemplate]);
 
   // Copy for WeChat
-  const handleCopyForWechat = useCallback(() => {
+  const handleCopyForWechat = useCallback(async () => {
     if (!content.trim()) {
       toast.error('请先输入文章内容');
       return;
     }
 
-    const template = selectedTemplate || styleTemplates[0];
-    const styledHtml = applyStyleToContent(content, template);
-
-    const blob = new Blob([styledHtml], { type: 'text/html' });
-    const clipboardItem = new ClipboardItem({
-      'text/html': blob,
-      'text/plain': new Blob([content], { type: 'text/plain' }),
-    });
-
-    navigator.clipboard
-      .write([clipboardItem])
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        toast.success('已复制公众号格式，可直接粘贴到公众号编辑器');
-      })
-      .catch(() => {
-        toast.error('复制失败，请手动复制');
-      });
-  }, [content, selectedTemplate]);
+    try {
+      if ('ClipboardItem' in window && window.ClipboardItem && navigator.clipboard.write) {
+        const blob = new Blob([content], { type: 'text/html' });
+        const clipboardItem = new ClipboardItem({
+          'text/html': blob,
+          'text/plain': new Blob([content], { type: 'text/plain' }),
+        });
+        await navigator.clipboard.write([clipboardItem]);
+      } else {
+        await navigator.clipboard.writeText(content);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('已复制公众号格式，可直接粘贴到公众号编辑器');
+    } catch {
+      toast.error('复制失败，请手动复制');
+    }
+  }, [content]);
 
   // Download HTML
   const handleDownloadHtml = useCallback(() => {
@@ -301,9 +300,6 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
       toast.error('请先输入文章内容');
       return;
     }
-
-    const template = selectedTemplate || styleTemplates[0];
-    const styledHtml = applyStyleToContent(content, template);
 
     const fullHtml = `<!DOCTYPE html>
 <html>
@@ -314,10 +310,10 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
   <style>
     body { margin: 0; padding: 20px; background-color: #f5f5f5; }
     .container { max-width: 375px; margin: 0 auto; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 20px; }
-  </style>
+</style>
 </head>
 <body>
-  <div class="container">${styledHtml}</div>
+  <div class="container">${content}</div>
 </body>
 </html>`;
 
@@ -332,10 +328,9 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
     URL.revokeObjectURL(url);
 
     toast.success('HTML文件已下载');
-  }, [content, selectedTemplate]);
+  }, [content]);
 
   const hasContent = content.trim().length > 0;
-  const canUndo = previousContentRef.current !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -381,6 +376,9 @@ export function FormattingPanel({ content, onApplyFormat }: FormattingPanelProps
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>公众号手机预览</DialogTitle>
+                <DialogDescription>
+                  预览当前已排版内容在手机公众号中的阅读效果。
+                </DialogDescription>
               </DialogHeader>
               <SafeHtml
                 html={previewHtml}

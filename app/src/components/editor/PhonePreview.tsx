@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -23,13 +24,16 @@ export function PhonePreview({ title, content }: PhonePreviewProps) {
           手机预览
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[440px] p-8 bg-gradient-to-b from-zinc-900 to-zinc-950 max-sm:max-w-[calc(100vw-2rem)] max-sm:p-4">
+      <DialogContent className="left-1/2 right-auto max-h-[95vh] w-[calc(100vw-1rem)] max-w-[440px] -translate-x-1/2 overflow-y-auto p-8 bg-gradient-to-b from-zinc-900 to-zinc-950 max-sm:p-3">
         <DialogHeader>
           <DialogTitle className="text-white">手机预览</DialogTitle>
+          <DialogDescription className="text-zinc-300">
+            以公众号移动端阅读视图预览当前标题和正文排版。
+          </DialogDescription>
         </DialogHeader>
         <div className="flex justify-center">
           {/* iPhone Frame - 移动端缩放以适配屏幕 */}
-          <div className="relative w-[375px] h-[740px] rounded-[52px] bg-zinc-950 p-[10px] shadow-[0_0_0_2px_#3a3a3c,0_0_0_4px_#1c1c1e,0_20px_60px_rgba(0,0,0,0.5)] max-sm:scale-[0.8] max-sm:origin-top">
+          <div className="relative h-[min(740px,calc(95vh-8rem))] w-[min(375px,calc(100vw-3.5rem))] rounded-[52px] bg-zinc-950 p-[10px] shadow-[0_0_0_2px_#3a3a3c,0_0_0_4px_#1c1c1e,0_20px_60px_rgba(0,0,0,0.5)]">
             {/* Side buttons */}
             <div className="absolute -left-[3px] top-[120px] w-[3px] h-[28px] bg-zinc-700 rounded-l-sm" />
             <div className="absolute -left-[3px] top-[170px] w-[3px] h-[50px] bg-zinc-700 rounded-l-sm" />

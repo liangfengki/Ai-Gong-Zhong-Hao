@@ -5,6 +5,7 @@ import { SafeHtml } from '@/components/ui/safe-html';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -62,7 +63,7 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
   <hr style="${hrStyle}" />
   <p style="${pStyle}"><strong style="color:${config.accentColor}">强调文字</strong>和普通文字的搭配效果。</p>
 </div>`;
-  }, [config, baseTemplateId]);
+  }, [config]);
 
   const handleBaseChange = (id: string) => {
     setBaseTemplateId(id);
@@ -177,19 +178,24 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
             <Sliders className="h-5 w-5 text-primary" />
             模板可视化编辑器
           </DialogTitle>
+          <DialogDescription>
+            调整字体、颜色、字号和圆角，实时预览并保存为自定义排版模板。
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
           {/* 基础模板选择 */}
           <div className="space-y-2">
             <Label className="text-xs font-medium">选择基础模板</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {styleTemplates.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => handleBaseChange(t.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${
-                    baseTemplateId === t.id
+                <div className="flex flex-wrap gap-1.5">
+                  {styleTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleBaseChange(t.id)}
+                      aria-pressed={baseTemplateId === t.id}
+                      className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${
+                        baseTemplateId === t.id
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border hover:bg-accent'
                   }`}
@@ -210,7 +216,9 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   {fontOptions.map((f, i) => (
                     <button
                       key={f.value}
+                      type="button"
                       onClick={() => setConfig(c => ({ ...c, fontFamily: i }))}
+                      aria-pressed={config.fontFamily === i}
                       className={`px-2 py-1.5 rounded text-xs border text-left transition-colors ${
                         config.fontFamily === i
                           ? 'border-primary bg-primary/10'
@@ -236,6 +244,7 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   min={12}
                   max={18}
                   step={1}
+                  aria-label="正文字号"
                 />
               </div>
 
@@ -251,6 +260,7 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   min={14}
                   max={26}
                   step={1}
+                  aria-label="行高"
                 />
               </div>
 
@@ -266,6 +276,7 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   min={0}
                   max={16}
                   step={1}
+                  aria-label="圆角大小"
                 />
               </div>
 
@@ -276,7 +287,10 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   {presetColors.map((color) => (
                     <button
                       key={color}
+                      type="button"
                       onClick={() => setConfig(c => ({ ...c, accentColor: color, h2Color: color }))}
+                      aria-label={`选择主题色 ${color}`}
+                      aria-pressed={config.accentColor === color}
                       className={`w-6 h-6 rounded-full border-2 transition-transform ${
                         config.accentColor === color ? 'border-foreground scale-110' : 'border-transparent'
                       }`}
@@ -293,7 +307,10 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   {['#1a1a1a', '#333333', '#4a4a4a', '#555555', '#666666'].map((color) => (
                     <button
                       key={color}
+                      type="button"
                       onClick={() => setConfig(c => ({ ...c, pColor: color }))}
+                      aria-label={`选择正文颜色 ${color}`}
+                      aria-pressed={config.pColor === color}
                       className={`w-6 h-6 rounded-full border-2 transition-transform ${
                         config.pColor === color ? 'border-foreground scale-110' : 'border-transparent'
                       }`}
@@ -310,7 +327,10 @@ export function TemplateEditor({ onSave }: TemplateEditorProps) {
                   {['#f8f9fa', '#f0f7f0', '#fff5f5', '#f5f5f5', '#eef2ff', '#fef3c7'].map((color) => (
                     <button
                       key={color}
+                      type="button"
                       onClick={() => setConfig(c => ({ ...c, blockquoteBg: color }))}
+                      aria-label={`选择引用块背景色 ${color}`}
+                      aria-pressed={config.blockquoteBg === color}
                       className={`w-6 h-6 rounded-full border-2 transition-transform ${
                         config.blockquoteBg === color ? 'border-foreground scale-110' : 'border-transparent'
                       }`}

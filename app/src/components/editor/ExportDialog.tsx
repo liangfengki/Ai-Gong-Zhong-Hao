@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -164,6 +165,13 @@ function htmlToDocxParagraphs(html: string): Paragraph[] {
 export function ExportDialog({ title, content }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+
+  const runOnKeyboard = (event: React.KeyboardEvent, action: () => void) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      action();
+    }
+  };
 
   const downloadFile = (filename: string, data: string | Blob, mimeType: string) => {
     const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
@@ -330,9 +338,19 @@ ${content}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>导出文章</DialogTitle>
+          <DialogDescription>
+            将当前文章导出为 Markdown、HTML、PDF、Word 或纯文本。
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={exportMarkdown}>
+          <Card
+            role="button"
+            tabIndex={0}
+            aria-label="导出 Markdown"
+            className="cursor-pointer hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={exportMarkdown}
+            onKeyDown={(event) => runOnKeyboard(event, exportMarkdown)}
+          >
             <CardContent className="flex items-center gap-3 p-4">
               <FileCode className="h-8 w-8 text-blue-500" />
               <div>
@@ -341,7 +359,14 @@ ${content}
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={exportHTML}>
+          <Card
+            role="button"
+            tabIndex={0}
+            aria-label="导出 HTML"
+            className="cursor-pointer hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={exportHTML}
+            onKeyDown={(event) => runOnKeyboard(event, exportHTML)}
+          >
             <CardContent className="flex items-center gap-3 p-4">
               <FileType className="h-8 w-8 text-orange-500" />
               <div>
@@ -350,7 +375,14 @@ ${content}
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={exportPDF}>
+          <Card
+            role="button"
+            tabIndex={0}
+            aria-label="导出 PDF"
+            className="cursor-pointer hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={exportPDF}
+            onKeyDown={(event) => runOnKeyboard(event, exportPDF)}
+          >
             <CardContent className="flex items-center gap-3 p-4">
               <FileImage className="h-8 w-8 text-red-500" />
               <div>
@@ -360,8 +392,13 @@ ${content}
             </CardContent>
           </Card>
           <Card
-            className={`cursor-pointer hover:border-primary transition-colors ${exporting === 'word' ? 'opacity-60 pointer-events-none' : ''}`}
+            role="button"
+            tabIndex={exporting === 'word' ? -1 : 0}
+            aria-label="导出 Word"
+            aria-disabled={exporting === 'word'}
+            className={`cursor-pointer hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${exporting === 'word' ? 'opacity-60 pointer-events-none' : ''}`}
             onClick={() => exporting !== 'word' && exportWord()}
+            onKeyDown={(event) => exporting !== 'word' && runOnKeyboard(event, exportWord)}
           >
             <CardContent className="flex items-center gap-3 p-4">
               <File className="h-8 w-8 text-indigo-500" />
@@ -373,7 +410,14 @@ ${content}
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary transition-colors" onClick={exportText}>
+          <Card
+            role="button"
+            tabIndex={0}
+            aria-label="导出纯文本"
+            className="cursor-pointer hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={exportText}
+            onKeyDown={(event) => runOnKeyboard(event, exportText)}
+          >
             <CardContent className="flex items-center gap-3 p-4">
               <FileText className="h-8 w-8 text-gray-500" />
               <div>

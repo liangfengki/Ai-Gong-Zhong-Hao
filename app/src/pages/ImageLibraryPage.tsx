@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Download,
@@ -21,6 +22,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -29,6 +31,8 @@ import { toast } from 'sonner';
 import { searchAllImages } from '@/services/api';
 import { useAppStore } from '@/stores/useAppStore';
 import type { ImageAsset } from '@/types';
+
+type ImageOrientation = 'landscape' | 'portrait' | 'squarish';
 
 const sourceColors: Record<string, string> = {
   unsplash: 'bg-black',
@@ -66,6 +70,7 @@ const categoryTags = [
 const DEFAULT_KEYWORD = '风景';
 
 export function ImageLibraryPage() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,37 +81,47 @@ export function ImageLibraryPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [imageSource, setImageSource] = useState<string>('api');
   const [activeCategory, setActiveCategory] = useState<string>(DEFAULT_KEYWORD);
+  const hasLoadedDefaultImagesRef = useRef(false);
 
-  const handleSearch = useCallback(async (query?: string, isLoadMore = false) => {
-    const q = query || searchQuery;
+  const runSearch = useCallback(async (
+    query: string,
+    {
+      nextPage = 1,
+      append = false,
+      nextOrientation = 'all',
+    }: {
+      nextPage?: number;
+      append?: boolean;
+      nextOrientation?: string;
+    } = {}
+  ) => {
+    const q = query;
     if (!q.trim()) return;
     
-    if (!isLoadMore) {
+    if (!append) {
       setSearchQuery(q);
       setActiveCategory(q);
-      setPage(1);
     }
     
     setLoading(true);
     
     try {
-      const currentPage = isLoadMore ? page + 1 : 1;
       const result = await searchAllImages({
         query: q,
-        page: currentPage,
+        page: nextPage,
         pageSize: 30,
-        orientation: orientation === 'all' ? undefined : orientation as any,
+        orientation: nextOrientation === 'all' ? undefined : (nextOrientation as ImageOrientation),
       });
       
-      if (isLoadMore) {
+      if (append) {
         setImages((prev) => [...prev, ...result.images]);
-        setPage(currentPage);
       } else {
         setImages(result.images);
       }
+      setPage(nextPage);
       
       setImageSource(result.sources.includes('loremflickr-fallback') ? 'loremflickr' : 'api');
-    } catch (error) {
+    } catch {
       toast.error('搜索失败', {
         description: '请稍后重试',
       });
@@ -114,20 +129,30 @@ export function ImageLibraryPage() {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [searchQuery, page, orientation]);
+  }, []);
 
   // 页面加载时自动搜索默认关键词
   useEffect(() => {
-    handleSearch(DEFAULT_KEYWORD);
-  }, []);
+    if (hasLoadedDefaultImagesRef.current) return;
+    hasLoadedDefaultImagesRef.current = true;
+    runSearch(DEFAULT_KEYWORD);
+  }, [runSearch]);
+
+  const handleSearch = useCallback(async (query?: string) => {
+    const q = query || searchQuery;
+    await runSearch(q, { nextPage: 1, nextOrientation: orientation });
+  }, [runSearch, searchQuery, orientation]);
 
   const handleLoadMore = async () => {
-    await handleSearch(searchQuery, true);
+    await runSearch(searchQuery || activeCategory || DEFAULT_KEYWORD, {
+      nextPage: page + 1,
+      append: true,
+      nextOrientation: orientation,
+    });
   };
 
   const handleCategoryClick = (keyword: string) => {
-    setActiveCategory(keyword);
-    handleSearch(keyword);
+    runSearch(keyword, { nextPage: 1, nextOrientation: orientation });
   };
 
   const handleCopyImage = async (image: ImageAsset) => {
@@ -152,11 +177,11 @@ export function ImageLibraryPage() {
       toast.success('复制成功', {
         description: '图片已复制，可直接粘贴到编辑器（Ctrl+V）',
       });
-    } catch (error) {
+    } catch {
       try {
         await navigator.clipboard.writeText(image.url);
         toast.success('已复制图片链接');
-      } catch (e) {
+      } catch {
         toast.error('复制失败');
       }
     }
@@ -166,14 +191,17 @@ export function ImageLibraryPage() {
     // 通过 store 传递图片到编辑器（CustomEvent 在编辑器卸载时无法工作）
     useAppStore.getState().addPendingImageInsert({ url: image.url, alt: image.alt });
     toast.success('图片已发送到编辑器', {
-      description: '切回编辑器后图片将自动插入',
+      description: '已切回编辑器并自动插入图片',
     });
+    setPreviewImage(null);
+    navigate('/editor');
   };
 
   const handleDownload = async (image: ImageAsset) => {
     setDownloadingId(image.id);
+    const downloadSource = image.downloadUrl || image.url;
     try {
-      const res = await fetch(image.url, { mode: 'cors' });
+      const res = await fetch(downloadSource, { mode: 'cors' });
       if (!res.ok) throw new Error('下载失败');
       const blob = await res.blob();
       const ext = res.headers.get('content-type')?.includes('png') ? 'png' : 'jpg';
@@ -186,15 +214,18 @@ export function ImageLibraryPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success('下载成功');
-    } catch (error) {
+    } catch {
       const a = document.createElement('a');
-      a.href = image.url;
+      a.href = downloadSource;
       a.download = `${image.source}-${image.id}.jpg`;
       a.target = '_blank';
       a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      toast.info('已打开图片链接', {
+        description: '浏览器无法直接下载时，可在新页面手动保存图片',
+      });
     } finally {
       setDownloadingId(null);
     }
@@ -320,10 +351,17 @@ export function ImageLibraryPage() {
             {images.map((image) => (
               <Card
                 key={image.id}
-                className="group cursor-pointer overflow-hidden transition-all hover:shadow-xl hover:scale-[1.02] border-0 bg-muted/50"
-                onClick={() => setPreviewImage(image)}
+                className="group overflow-hidden border-0 bg-muted/50 transition-all hover:scale-[1.02] hover:shadow-xl"
               >
                 <div className="relative aspect-square overflow-hidden bg-muted">
+                  <button
+                    type="button"
+                    aria-label={`预览图片：${image.alt}`}
+                    className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    onClick={() => setPreviewImage(image)}
+                  >
+                    <span className="sr-only">预览图片：{image.alt}</span>
+                  </button>
                   <img
                     src={image.thumbUrl}
                     alt={image.alt}
@@ -333,8 +371,8 @@ export function ImageLibraryPage() {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYc8L3RleHQ+PC9zdmc+';
                     }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute bottom-0 left-0 right-0 z-20 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
                     <div className="flex items-center justify-between">
                       <Badge className={`${sourceColors[image.source] || 'bg-gray-500'} text-white text-xs`}>
                         {sourceNames[image.source] || image.source}
@@ -344,6 +382,8 @@ export function ImageLibraryPage() {
                           size="icon"
                           variant="secondary"
                           className="h-8 w-8 bg-white/90 hover:bg-white"
+                          aria-label="复制图片"
+                          title="复制图片"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCopyImage(image);
@@ -355,6 +395,8 @@ export function ImageLibraryPage() {
                           size="icon"
                           variant="secondary"
                           className="h-8 w-8 bg-emerald-500/90 hover:bg-emerald-500 text-white"
+                          aria-label="插入到编辑器"
+                          title="插入到编辑器"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleInsertToEditor(image);
@@ -366,6 +408,8 @@ export function ImageLibraryPage() {
                           size="icon"
                           variant="secondary"
                           className="h-8 w-8 bg-white/90 hover:bg-white"
+                          aria-label="下载图片"
+                          title="下载图片"
                           disabled={downloadingId === image.id}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -459,6 +503,9 @@ export function ImageLibraryPage() {
                 </Button>
               </div>
             </DialogTitle>
+            <DialogDescription>
+              查看图片大图，并可复制、下载或插入到当前文章。
+            </DialogDescription>
           </DialogHeader>
           {previewImage && (
             <div className="space-y-4">

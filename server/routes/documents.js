@@ -1,10 +1,18 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import { query } from '../db.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { isDatabaseAvailable, query } from '../db.js';
 import { documentValidation } from '../middleware/validation.js';
 import { optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fallbackFile = path.join(__dirname, '..', 'data', 'documents.json');
+const memoryDocuments = new Map();
+
+loadFallbackDocuments();
 
 // 将数据库行映射为 API 响应格式
 function mapRow(row) {
@@ -19,6 +27,51 @@ function mapRow(row) {
   };
 }
 
+function mapMemoryDocument(doc) {
+  return {
+    id: doc.id,
+    title: doc.title,
+    content: doc.content,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    createdBy: doc.createdBy,
+    updatedBy: doc.updatedBy,
+  };
+}
+
+function getSortedMemoryDocuments() {
+  return Array.from(memoryDocuments.values()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
+function loadFallbackDocuments() {
+  try {
+    if (!fs.existsSync(fallbackFile)) return;
+    const docs = JSON.parse(fs.readFileSync(fallbackFile, 'utf8'));
+    if (!Array.isArray(docs)) return;
+    memoryDocuments.clear();
+    for (const doc of docs) {
+      if (doc?.id) memoryDocuments.set(doc.id, doc);
+    }
+  } catch (error) {
+    console.warn('读取文档 fallback 文件失败，将使用空文档列表:', error.message);
+  }
+}
+
+function persistFallbackDocuments() {
+  try {
+    fs.mkdirSync(path.dirname(fallbackFile), { recursive: true });
+    fs.writeFileSync(
+      fallbackFile,
+      JSON.stringify(getSortedMemoryDocuments(), null, 2),
+      'utf8'
+    );
+  } catch (error) {
+    console.error('写入文档 fallback 文件失败:', error.message);
+  }
+}
+
 // 文档列表（支持分页）
 router.get('/', documentValidation.list, optionalAuth, async (req, res) => {
   try {
@@ -26,6 +79,26 @@ router.get('/', documentValidation.list, optionalAuth, async (req, res) => {
     const p = Math.max(1, parseInt(page, 10) || 1);
     const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
     const offset = (p - 1) * l;
+
+    if (!isDatabaseAvailable()) {
+      const sorted = getSortedMemoryDocuments();
+      const items = sorted.slice(offset, offset + l).map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        updatedAt: doc.updatedAt,
+        createdAt: doc.createdAt,
+      }));
+
+      return res.json({
+        items,
+        total: sorted.length,
+        page: p,
+        limit: l,
+        totalPages: Math.ceil(sorted.length / l),
+        requestId: req.id,
+        storage: 'file',
+      });
+    }
 
     const countResult = await query('SELECT COUNT(*) FROM documents');
     const total = parseInt(countResult.rows[0].count, 10);
@@ -62,6 +135,17 @@ router.get('/', documentValidation.list, optionalAuth, async (req, res) => {
 // 获取单个文档
 router.get('/:id', documentValidation.get, optionalAuth, async (req, res) => {
   try {
+    if (!isDatabaseAvailable()) {
+      const doc = memoryDocuments.get(req.params.id);
+      if (!doc) {
+        return res.status(404).json({
+          error: '文档不存在',
+          requestId: req.id,
+        });
+      }
+      return res.json({ ...mapMemoryDocument(doc), requestId: req.id, storage: 'file' });
+    }
+
     const result = await query('SELECT * FROM documents WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -94,6 +178,21 @@ router.post('/', documentValidation.create, optionalAuth, async (req, res) => {
     const now = new Date().toISOString();
     const createdBy = req.user?.id || 'anonymous';
 
+    if (!isDatabaseAvailable()) {
+      const doc = {
+        id,
+        title: title || '无标题',
+        content: content || '',
+        createdAt: now,
+        updatedAt: now,
+        createdBy,
+        updatedBy: createdBy,
+      };
+      memoryDocuments.set(id, doc);
+      persistFallbackDocuments();
+      return res.status(201).json({ ...mapMemoryDocument(doc), requestId: req.id, storage: 'file' });
+    }
+
     const result = await query(
       `INSERT INTO documents (id, title, content, created_at, updated_at, created_by, updated_by)
        VALUES ($1, $2, $3, $4, $4, $5, $5)
@@ -117,6 +216,27 @@ router.put('/:id', documentValidation.update, optionalAuth, async (req, res) => 
     const { title, content } = req.body;
     const now = new Date().toISOString();
     const updatedBy = req.user?.id || 'anonymous';
+
+    if (!isDatabaseAvailable()) {
+      const existing = memoryDocuments.get(req.params.id);
+      if (!existing) {
+        return res.status(404).json({
+          error: '文档不存在',
+          requestId: req.id,
+        });
+      }
+
+      const updated = {
+        ...existing,
+        title: title !== undefined ? title : existing.title,
+        content: content !== undefined ? content : existing.content,
+        updatedAt: now,
+        updatedBy,
+      };
+      memoryDocuments.set(req.params.id, updated);
+      persistFallbackDocuments();
+      return res.json({ ...mapMemoryDocument(updated), requestId: req.id, storage: 'file' });
+    }
 
     // 先检查文档是否存在
     const existing = await query('SELECT id FROM documents WHERE id = $1', [req.params.id]);
@@ -165,6 +285,26 @@ router.put('/:id', documentValidation.update, optionalAuth, async (req, res) => 
 // 删除文档
 router.delete('/:id', documentValidation.delete, optionalAuth, async (req, res) => {
   try {
+    if (!isDatabaseAvailable()) {
+      const existing = memoryDocuments.get(req.params.id);
+      if (!existing) {
+        return res.status(404).json({
+          error: '文档不存在',
+          requestId: req.id,
+        });
+      }
+      memoryDocuments.delete(req.params.id);
+      persistFallbackDocuments();
+      return res.json({
+        success: true,
+        deletedId: existing.id,
+        deletedTitle: existing.title,
+        requestId: req.id,
+        deletedBy: req.user?.id || 'anonymous',
+        storage: 'file',
+      });
+    }
+
     const result = await query(
       'DELETE FROM documents WHERE id = $1 RETURNING id, title',
       [req.params.id]

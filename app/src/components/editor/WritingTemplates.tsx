@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { BookOpen, ChevronRight, Copy } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -104,10 +104,14 @@ export function WritingTemplates({ onInsert }: WritingTemplatesProps) {
     setOpen(false);
   };
 
-  const handleCopy = (template: WritingTemplate, e: React.MouseEvent) => {
+  const handleCopy = async (template: WritingTemplate, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(template.content);
-    toast.success('已复制到剪贴板');
+    try {
+      await navigator.clipboard.writeText(template.content);
+      toast.success('已复制到剪贴板');
+    } catch {
+      toast.error('复制失败', { description: '请检查浏览器剪贴板权限后重试' });
+    }
   };
 
   return (
@@ -121,6 +125,9 @@ export function WritingTemplates({ onInsert }: WritingTemplatesProps) {
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>写作模板库</DialogTitle>
+          <DialogDescription>
+            选择标题、开头、结尾或金句模板插入到当前文章。
+          </DialogDescription>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
@@ -135,12 +142,21 @@ export function WritingTemplates({ onInsert }: WritingTemplatesProps) {
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-2">
                   {cat.templates.map((template) => (
-                    <Card
+                    <div
                       key={template.id}
-                      className="cursor-pointer hover:border-primary transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`插入${template.name}模板`}
+                      className="w-full rounded-lg border bg-card text-left shadow-sm transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       onClick={() => handleInsert(template)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleInsert(template);
+                        }
+                      }}
                     >
-                      <CardContent className="p-3">
+                      <div className="p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -157,6 +173,8 @@ export function WritingTemplates({ onInsert }: WritingTemplatesProps) {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
+                              aria-label={`复制${template.name}模板`}
+                              title={`复制${template.name}模板`}
                               onClick={(e) => handleCopy(template, e)}
                             >
                               <Copy className="h-3.5 w-3.5" />
@@ -164,8 +182,8 @@ export function WritingTemplates({ onInsert }: WritingTemplatesProps) {
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>

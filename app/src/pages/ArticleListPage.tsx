@@ -23,6 +23,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -164,11 +165,13 @@ export function ArticleListPage() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
+                      aria-label="编辑文章"
+                      title="编辑文章"
                       onClick={() => handleEdit(article)}
                     >
                       <Edit3 className="h-4 w-4" />
@@ -177,6 +180,8 @@ export function ArticleListPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
+                      aria-label="删除文章"
+                      title="删除文章"
                       onClick={() => setDeleteTarget(article)}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -233,10 +238,10 @@ export function ArticleListPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除文章"{deleteTarget?.title || '无标题'}"吗？此操作不可撤销。
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            确定要删除文章"{deleteTarget?.title}"吗？此操作不可撤销。
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               取消

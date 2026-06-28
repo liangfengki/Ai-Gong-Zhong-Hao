@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -49,6 +50,9 @@ export function VersionHistory({ articleId, onRestore }: VersionHistoryProps) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>版本历史</DialogTitle>
+          <DialogDescription>
+            查看当前文章的历史版本，可恢复或删除单个版本。
+          </DialogDescription>
         </DialogHeader>
         <ScrollArea className="h-[400px] pr-4">
           {versions.length === 0 ? (
@@ -83,6 +87,7 @@ export function VersionHistory({ articleId, onRestore }: VersionHistoryProps) {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
+                      aria-label="恢复此版本"
                       title="恢复此版本"
                       onClick={() => onRestore(version)}
                     >
@@ -92,6 +97,7 @@ export function VersionHistory({ articleId, onRestore }: VersionHistoryProps) {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive hover:text-destructive"
+                      aria-label="删除此版本"
                       title="删除此版本"
                       onClick={() => deleteArticleVersion(version.id)}
                     >

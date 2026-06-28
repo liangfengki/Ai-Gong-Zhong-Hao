@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -179,8 +180,17 @@ export function HotTopicsPage() {
               {filteredTopics.map((topic, index) => (
                 <Card
                   key={topic.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`用AI仿写热点：${topic.title}`}
                   className="group cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
                   onClick={() => handleTopicClick(topic)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleTopicClick(topic);
+                    }
+                  }}
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
@@ -197,6 +207,8 @@ export function HotTopicsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
+                          aria-label={favoriteTopics.includes(topic.id) ? '取消收藏热点' : '收藏热点'}
+                          title={favoriteTopics.includes(topic.id) ? '取消收藏热点' : '收藏热点'}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleFavoriteTopic(topic.id);
@@ -274,10 +286,10 @@ export function HotTopicsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>当前有未保存的内容</DialogTitle>
+            <DialogDescription>
+              进入热点写作会覆盖当前编辑器内容，继续前请确认是否保留现有草稿。
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            进入热点写作会覆盖当前编辑器内容，确定继续吗？
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingTopic(null)}>取消</Button>
             <Button onClick={() => { if (pendingTopic) doNavigate(pendingTopic); setPendingTopic(null); }}>

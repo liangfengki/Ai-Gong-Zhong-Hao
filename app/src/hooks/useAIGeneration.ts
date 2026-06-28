@@ -25,10 +25,6 @@ export function useAIGeneration() {
         settings.ai.baseUrl
       );
       toast.success('生成完成', { description: '文章已生成，您可以继续编辑' });
-    } catch (err) {
-      const message = getErrorMessage(err);
-      toast.error('生成失败', { description: message });
-      throw err; // 重新抛出，让调用方可以恢复内容
     } finally {
       setIsGenerating(false);
     }
@@ -88,12 +84,15 @@ export function useAIGeneration() {
   return { isGenerating, isGeneratingImage, isGeneratingVideo, handleGenerate, handleGenerateImage, handleGenerateVideo };
 }
 
-function getErrorMessage(err: unknown): string {
+export function getErrorMessage(err: unknown): string {
   if (err instanceof TypeError && err.message.includes('fetch')) {
     return '网络连接失败，请检查网络';
   }
   if (err instanceof Error) {
     const msg = err.message;
+    if (msg.includes('MISSING_API_KEY') || msg.includes('未配置 API Key') || msg.includes('missing API key') || msg.includes('Missing API key')) {
+      return '未配置 API Key，请在设置页配置';
+    }
     if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('invalid')) {
       return 'API Key 无效，请检查设置';
     }

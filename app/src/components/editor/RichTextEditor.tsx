@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import History from '@tiptap/extension-history';
 import Underline from '@tiptap/extension-underline';
@@ -44,6 +45,43 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppStore } from '@/stores/useAppStore';
 import './RichTextEditor.css';
+
+const InlineStyleAttributes = Extension.create({
+  name: 'inlineStyleAttributes',
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: [
+          'paragraph',
+          'heading',
+          'blockquote',
+          'bulletList',
+          'orderedList',
+          'listItem',
+          'horizontalRule',
+          'image',
+          'link',
+          'bold',
+          'italic',
+          'underline',
+          'strike',
+          'highlight',
+        ],
+        attributes: {
+          style: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('style'),
+            renderHTML: (attributes) => {
+              if (!attributes.style) return {};
+              return { style: attributes.style };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
 
 export interface RichTextEditorHandle {
   /** 获取 TipTap 编辑器实例 */
@@ -97,9 +135,22 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   const [uploading, setUploading] = useState(0);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const isInternalChange = useRef(false);
+  const lastInternalHtmlRef = useRef<string | null>(null);
   const [initialContent] = useState(() => content);
   const isMounted = useRef(true);
   const tiptapEditorRef = useRef<TiptapEditor | null>(null);
+
+  const consumePendingImages = useCallback((activeEditor: TiptapEditor) => {
+    const { pendingImageInserts, clearPendingImageInserts } = useAppStore.getState();
+    if (pendingImageInserts.length === 0) return;
+
+    pendingImageInserts.forEach(({ url, alt }) => {
+      activeEditor.chain().focus().setImage({ src: url, alt: alt || '' }).run();
+    });
+    clearPendingImageInserts();
+    isInternalChange.current = true;
+    onChange(activeEditor.getHTML());
+  }, [onChange]);
 
   const editor = useEditor({
     extensions: [
@@ -138,6 +189,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       }),
       TextStyle,
       Color,
+      InlineStyleAttributes,
     ],
     content: initialContent,
     onCreate: ({ editor }) => {
@@ -150,6 +202,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         try {
           view.mounted = false;
         } catch {
+          // view may already be detached during React teardown
         }
         const dom = view.dom;
         const parent = dom.parentNode as (Node & { removeChild: (child: Node) => Node }) | null;
@@ -171,7 +224,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     },
     onUpdate: ({ editor }) => {
       isInternalChange.current = true;
-      onChange(editor.getHTML());
+      const nextHtml = editor.getHTML();
+      lastInternalHtmlRef.current = nextHtml;
+      onChange(nextHtml);
     },
     editorProps: {
       handleKeyDown: (_view, event) => {
@@ -220,11 +275,14 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   }, []);
 
   useEffect(() => {
-    if (!editor || !content) return;
-    if (isInternalChange.current) {
+    if (!editor) return;
+    if (isInternalChange.current && content === lastInternalHtmlRef.current) {
       isInternalChange.current = false;
+      lastInternalHtmlRef.current = null;
       return;
     }
+    isInternalChange.current = false;
+    lastInternalHtmlRef.current = null;
     const raf = requestAnimationFrame(() => {
       if (!isMounted.current) return;
       try {
@@ -306,13 +364,17 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .run();
       // 同步到 React state
       isInternalChange.current = true;
-      onChange(editor.getHTML());
+      const nextHtml = editor.getHTML();
+      lastInternalHtmlRef.current = nextHtml;
+      onChange(nextHtml);
     },
     clearContent: () => {
       if (!editor) return;
       editor.commands.clearContent();
       isInternalChange.current = true;
-      onChange(editor.getHTML());
+      const nextHtml = editor.getHTML();
+      lastInternalHtmlRef.current = nextHtml;
+      onChange(nextHtml);
     },
     getSelectedText: () => {
       if (!editor) return '';
@@ -342,7 +404,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .run();
       // 同步到 React state
       isInternalChange.current = true;
-      onChange(editor.getHTML());
+      const nextHtml = editor.getHTML();
+      lastInternalHtmlRef.current = nextHtml;
+      onChange(nextHtml);
     },
     insertContentAtPosition: (pos: number, html: string) => {
       if (!editor) return;
@@ -351,7 +415,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .run();
       // 同步到 React state
       isInternalChange.current = true;
-      onChange(editor.getHTML());
+      const nextHtml = editor.getHTML();
+      lastInternalHtmlRef.current = nextHtml;
+      onChange(nextHtml);
     },
     getSelectionInfo: () => {
       if (!editor) return { from: 0, to: 0, empty: true };
@@ -404,17 +470,20 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   // 从 store 消费待插入的图片（跨页面传递，如从图片素材库发送过来的图片）
   useEffect(() => {
     if (!editor) return;
-    const { pendingImageInserts, clearPendingImageInserts } = useAppStore.getState();
-    if (pendingImageInserts.length === 0) return;
 
-    // 延迟一帧确保编辑器完全就绪
-    requestAnimationFrame(() => {
-      pendingImageInserts.forEach(({ url, alt }) => {
-        editor.chain().focus().setImage({ src: url, alt: alt || '' }).run();
-      });
-      clearPendingImageInserts();
+    const run = () => {
+      requestAnimationFrame(() => consumePendingImages(editor));
+    };
+
+    run();
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
+      if (state.pendingImageInserts !== prevState.pendingImageInserts) {
+        run();
+      }
     });
-  }, [editor]);
+
+    return unsubscribe;
+  }, [consumePendingImages, editor]);
 
   // 通知父组件 editor 已就绪
   useEffect(() => {
@@ -440,6 +509,15 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       editor.chain().focus().setImage({ src: url }).run();
     }
   };
+
+  const keepEditorSelection = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
+
+  const buttonA11y = (label: string) => ({
+    'aria-label': label,
+    title: label,
+  });
 
   return (
     <div
@@ -477,6 +555,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('撤销')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().undo().run()}
                   disabled={!editor.can().undo()}
                 >
@@ -491,6 +571,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('重做')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().redo().run()}
                   disabled={!editor.can().redo()}
                 >
@@ -510,6 +592,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('大标题')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
                   className={editor.isActive('heading', { level: 1 }) ? 'active' : ''}
                 >
@@ -524,6 +608,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('小标题')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                   className={editor.isActive('heading', { level: 2 }) ? 'active' : ''}
                 >
@@ -543,6 +629,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('加粗')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleBold().run()}
                   className={editor.isActive('bold') ? 'active' : ''}
                 >
@@ -557,6 +645,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('斜体')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleItalic().run()}
                   className={editor.isActive('italic') ? 'active' : ''}
                 >
@@ -571,6 +661,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('下划线')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleUnderline().run()}
                   className={editor.isActive('underline') ? 'active' : ''}
                 >
@@ -585,6 +677,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('删除线')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleStrike().run()}
                   className={editor.isActive('strike') ? 'active' : ''}
                 >
@@ -599,6 +693,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('高亮')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleHighlight().run()}
                   className={editor.isActive('highlight') ? 'active' : ''}
                 >
@@ -618,6 +714,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('左对齐')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().setTextAlign('left').run()}
                   className={editor.isActive({ textAlign: 'left' }) ? 'active' : ''}
                 >
@@ -632,6 +730,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('居中')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().setTextAlign('center').run()}
                   className={editor.isActive({ textAlign: 'center' }) ? 'active' : ''}
                 >
@@ -646,6 +746,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('右对齐')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().setTextAlign('right').run()}
                   className={editor.isActive({ textAlign: 'right' }) ? 'active' : ''}
                 >
@@ -665,6 +767,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('无序列表')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleBulletList().run()}
                   className={editor.isActive('bulletList') ? 'active' : ''}
                 >
@@ -679,6 +783,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('有序列表')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleOrderedList().run()}
                   className={editor.isActive('orderedList') ? 'active' : ''}
                 >
@@ -693,6 +799,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('引用')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().toggleBlockquote().run()}
                   className={editor.isActive('blockquote') ? 'active' : ''}
                 >
@@ -712,6 +820,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('分割线')}
+                  onMouseDown={keepEditorSelection}
                   onClick={() => editor.chain().focus().setHorizontalRule().run()}
                 >
                   <Minus className="h-4 w-4" />
@@ -725,6 +835,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('链接')}
+                  onMouseDown={keepEditorSelection}
                   onClick={addLink}
                   className={editor.isActive('link') ? 'active' : ''}
                 >
@@ -739,6 +851,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 <Button
                   variant="ghost"
                   size="sm"
+                  {...buttonA11y('图片')}
+                  onMouseDown={keepEditorSelection}
                   onClick={addImage}
                 >
                   <ImageIcon className="h-4 w-4" />

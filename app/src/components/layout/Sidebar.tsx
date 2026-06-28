@@ -107,7 +107,8 @@ export function Sidebar() {
 
   // Close mobile sidebar on route change
   useEffect(() => {
-    setMobileOpen(false);
+    const id = window.setTimeout(() => setMobileOpen(false), 0);
+    return () => window.clearTimeout(id);
   }, [location.pathname]);
 
   return (
@@ -117,6 +118,8 @@ export function Sidebar() {
         variant="ghost"
         size="icon"
         className="fixed top-3 left-3 z-50 md:hidden h-10 w-10"
+        aria-label={mobileOpen ? '关闭导航菜单' : '打开导航菜单'}
+        aria-expanded={mobileOpen}
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -153,6 +156,13 @@ export function Sidebar() {
                 size="icon"
                 onClick={settings.followSystemTheme ? toggleFollowSystemTheme : toggleDarkMode}
                 className="h-8 w-8"
+                aria-label={
+                  settings.followSystemTheme
+                    ? '关闭跟随系统主题'
+                    : settings.darkMode
+                    ? '切换到亮色模式'
+                    : '切换到暗色模式'
+                }
                 title={
                   settings.followSystemTheme
                     ? '跟随系统主题（点击关闭）'
@@ -175,6 +185,7 @@ export function Sidebar() {
                   size="icon"
                   onClick={toggleFollowSystemTheme}
                   className="h-8 w-8"
+                  aria-label="跟随系统主题"
                   title="跟随系统主题"
                 >
                   <Monitor className="h-3.5 w-3.5 opacity-60" />
@@ -185,6 +196,7 @@ export function Sidebar() {
                 size="icon"
                 onClick={toggleSidebar}
                 className="hidden md:flex h-8 w-8"
+                aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
               >
                 {sidebarOpen ? (
                   <ChevronLeft className="h-4 w-4" />
@@ -281,6 +293,13 @@ export function Sidebar() {
                 size="icon"
                 onClick={settings.followSystemTheme ? toggleFollowSystemTheme : toggleDarkMode}
                 className="h-8 w-8"
+                aria-label={
+                  settings.followSystemTheme
+                    ? '关闭跟随系统主题'
+                    : settings.darkMode
+                    ? '切换到亮色模式'
+                    : '切换到暗色模式'
+                }
                 title={
                   settings.followSystemTheme
                     ? '跟随系统主题（点击关闭）'
@@ -303,6 +322,7 @@ export function Sidebar() {
                   size="icon"
                   onClick={toggleFollowSystemTheme}
                   className="h-8 w-8"
+                  aria-label="跟随系统主题"
                   title="跟随系统主题"
                 >
                   <Monitor className="h-3.5 w-3.5 opacity-60" />
@@ -322,6 +342,7 @@ export function Sidebar() {
                   <Link
                     key={item.path}
                     to={item.path}
+                    onClick={() => setMobileOpen(false)}
                     className={cn(
                       'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent',
                       isActive && 'bg-accent font-medium text-accent-foreground'

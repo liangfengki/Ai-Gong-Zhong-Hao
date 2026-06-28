@@ -1,0 +1,52 @@
+# 验收标准
+
+## 必跑验证
+
+每次交付必须提供以下命令的结果摘要：
+
+```bash
+cd app && npm run build
+cd app && npm run lint
+cd app && npx vitest run --reporter verbose
+```
+
+通过标准：
+
+- build 退出码为 `0`。
+- lint 为 `0 errors`。
+- vitest 所有测试通过。
+
+## 领域模板验收
+
+- 前端必须渲染 8 个领域模板。
+- 每个领域至少包含 `5` 条标题公式或示例标题。
+- 每个领域必须包含推荐字数、配图建议、内容结构和 CTA。
+- 选择领域后，AI 写作面板必须显示该领域信息，并能把 prompt 应用到生成流程。
+- 三种模式必须可选：只生成标题、生成大纲、生成完整文章；默认是生成完整文章。
+
+判定方式：
+
+- 自动测试验证模板数量、字段完整性和 prompt 组装。
+- 手动选择 `AI工具推荐`、`副业搞钱`、`AI创业项目` 三个领域，确认生成要求分别包含清单测评、项目路径、趋势案例逻辑。
+
+## 编辑器体验验收
+
+- 生成失败时不得丢失原文。
+- 应用排版前必须保留上一版，用户可撤销。
+- 复制到公众号、手机预览、下载 HTML 必须基于同一排版结果。
+- 标题输入最多 `30` 字并显示计数。
+- 字数统计、阅读时间和保存状态必须可见。
+
+## 安全与稳定验收
+
+- `SafeHtml` 必须移除 `script` 标签、事件属性和 `javascript:` 链接。
+- AI 内容分析前端必须兼容后端字段：`titleSuggestion/keywords/description` 和 `paragraphStructure/avgSentenceLength/vocabularyDiversity`。
+- 无图片 API Key 时图片搜索必须有 fallback 或清晰错误提示。
+- 无 AI API Key 时生成按钮必须给出可理解错误提示。
+
+## 服务验收
+
+- `./start.sh` 输出前端地址 `http://localhost:7658`。
+- 后端健康检查可访问 `http://localhost:6356/health`。
+- 后端热点代理使用 `/api/baidu/hot` 等 `/api/*` 路径。
+- 不直接修改 `dailyhot-api/`。

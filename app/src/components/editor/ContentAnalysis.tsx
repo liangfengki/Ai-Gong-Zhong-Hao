@@ -222,11 +222,6 @@ export function ContentAnalysis({ title, content, onAnalysisComplete }: ContentA
       return;
     }
 
-    if (!settings.ai.apiKey) {
-      toast.error('请先在设置中配置API Key');
-      return;
-    }
-
     setAnalyzing(true);
     setError(null);
 

@@ -33,7 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAppStore } from '@/stores/useAppStore';
-import type { WechatTemplate, AIProviderPreset } from '@/types';
+import type { WechatTemplate, AIProviderPreset, UserSettings } from '@/types';
 
 // ============ 内置中转站预设 ============
 const PROVIDER_PRESETS: AIProviderPreset[] = [
@@ -123,6 +123,16 @@ const skillIcons: Record<string, typeof Sparkles> = {
   'github-trending': Github,
 };
 
+export function validateAIConnectionConfig(settings: UserSettings): { ok: true } | { ok: false; message: string } {
+  if (!settings.ai.baseUrl.trim() || !settings.ai.model.trim()) {
+    return {
+      ok: false,
+      message: '请填写 API Base URL 和模型 ID',
+    };
+  }
+  return { ok: true };
+}
+
 export function SettingsPage() {
   const { settings, updateSettings, articles, exportData, importData } = useAppStore();
 
@@ -155,7 +165,7 @@ export function SettingsPage() {
   // 更新 store 中某个设置字段的 helper
   const updateAI = useCallback((updates: Partial<typeof settings.ai>) => {
     updateSettings({ ai: { ...settings.ai, ...updates } });
-  }, [settings.ai, updateSettings]);
+  }, [settings, updateSettings]);
 
   // 切换提供商预设
   const handleProviderChange = (providerId: string) => {
@@ -170,6 +180,13 @@ export function SettingsPage() {
 
   // 测试连接
   const handleTestConnection = async () => {
+    const validation = validateAIConnectionConfig(settings);
+    if (!validation.ok) {
+      setTestResult('error');
+      toast.error('连接失败', { description: validation.message });
+      return;
+    }
+
     setIsTesting(true);
     setTestResult(null);
     try {
@@ -195,7 +212,7 @@ export function SettingsPage() {
         setTestResult('error');
         toast.error('连接失败', { description: err.error || '请检查配置' });
       }
-    } catch (e) {
+    } catch {
       setTestResult('error');
       toast.error('连接失败', { description: '网络错误或服务未启动' });
     } finally {

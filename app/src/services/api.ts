@@ -68,22 +68,59 @@ export interface AIAnalysisResult {
   seo: {
     score: number;
     suggestions: string[];
+    titleSuggestion?: string;
+    keywords?: string[];
+    description?: string;
   };
   readability: {
     score: number;
     level: string;
     details: string[];
+    paragraphStructure?: string;
+    avgSentenceLength?: string;
+    vocabularyDiversity?: string;
   };
   sentiment: {
     type: string;
     score: number;
     description: string;
+    tendency?: string;
+    intensity?: string;
   };
   improvements: string[];
 }
 
+interface RawAIAnalysisResult {
+  qualityScore?: number;
+  seo?: {
+    score?: number;
+    suggestions?: string[];
+    titleSuggestion?: string;
+    keywords?: string[];
+    description?: string;
+  };
+  readability?: {
+    score?: number;
+    level?: string;
+    details?: string[];
+    paragraphStructure?: string;
+    avgSentenceLength?: string;
+    vocabularyDiversity?: string;
+  };
+  sentiment?: {
+    type?: string;
+    score?: number;
+    description?: string;
+    tendency?: string;
+    intensity?: string;
+  };
+  improvements?: string[];
+}
+
 // 代理服务器地址（用于避免CORS问题）
 const PROXY_BASE = '/api';
+const HOT_SOURCE_TIMEOUT_MS = 3500;
+const AI_STREAM_TIMEOUT_MS = 45000;
 
 // ============ 热点API ============
 
@@ -120,6 +157,16 @@ async function fetchHotBySource(source: string): Promise<{ topics: HotTopic[]; s
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then((value) => resolve(value))
+      .catch(() => resolve(fallback))
+      .finally(() => window.clearTimeout(timeoutId));
+  });
+}
+
 // 获取百度热搜
 export async function fetchBaiduHot() {
   return fetchHotBySource('baidu');
@@ -153,12 +200,12 @@ export async function fetchBilibiliHot() {
 // 获取所有热点
 export async function fetchAllHotTopics(): Promise<{ topics: HotTopic[]; stale: boolean; mock: boolean }> {
   const [baidu, weibo, douyin, zhihu, toutiao, bilibili] = await Promise.allSettled([
-    fetchBaiduHot(),
-    fetchWeiboHot(),
-    fetchDouyinHot(),
-    fetchZhihuHot(),
-    fetchToutiaoHot(),
-    fetchBilibiliHot(),
+    withTimeout(fetchBaiduHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
+    withTimeout(fetchWeiboHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
+    withTimeout(fetchDouyinHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
+    withTimeout(fetchZhihuHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
+    withTimeout(fetchToutiaoHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
+    withTimeout(fetchBilibiliHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
   ]);
   
   const topics: HotTopic[] = [];
@@ -332,11 +379,25 @@ export async function generateArticleStream(
   if (baseUrl) headers['x-base-url'] = baseUrl;
   if (model) headers['x-model'] = model;
 
-  const response = await fetch(`${PROXY_BASE}/ai/generate/stream`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ prompt, wordCount }),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), AI_STREAM_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch(`${PROXY_BASE}/ai/generate/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ prompt, wordCount }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('AI 流式请求超时，请稍后重试');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => '');
@@ -417,15 +478,83 @@ export async function analyzeContent(
     if (baseUrl) headers['x-base-url'] = baseUrl;
     if (model) headers['x-model'] = model;
 
-    const { data } = await axios.post<AIAnalysisResult>(`${PROXY_BASE}/ai/analyze-content`, {
+    const { data } = await axios.post<RawAIAnalysisResult>(`${PROXY_BASE}/ai/analyze-content`, {
       title,
       content,
     }, { headers });
-    return data;
+    return normalizeAnalysisResult(data);
   } catch (error) {
     console.error('AI内容分析失败:', error);
     throw error;
   }
+}
+
+function clampScore(score: unknown): number {
+  const n = typeof score === 'number' ? score : Number(score);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function normalizeSentimentType(tendency?: string, type?: string) {
+  const value = (type || tendency || 'neutral').toLowerCase();
+  if (value.includes('积极') || value === 'positive') return 'positive';
+  if (value.includes('消极') || value === 'negative') return 'negative';
+  return 'neutral';
+}
+
+function normalizeAnalysisResult(data: RawAIAnalysisResult): AIAnalysisResult {
+  const seoSuggestions = data.seo?.suggestions?.length
+    ? data.seo.suggestions
+    : [
+        data.seo?.titleSuggestion && `标题建议：${data.seo.titleSuggestion}`,
+        data.seo?.keywords?.length && `推荐关键词：${data.seo.keywords.join('、')}`,
+        data.seo?.description && `摘要建议：${data.seo.description}`,
+      ].filter((item): item is string => Boolean(item));
+
+  const readabilityDetails = data.readability?.details?.length
+    ? data.readability.details
+    : [
+        data.readability?.paragraphStructure && `段落结构：${data.readability.paragraphStructure}`,
+        data.readability?.avgSentenceLength && `句子长度：${data.readability.avgSentenceLength}`,
+        data.readability?.vocabularyDiversity && `词汇多样性：${data.readability.vocabularyDiversity}`,
+      ].filter((item): item is string => Boolean(item));
+
+  const sentimentType = normalizeSentimentType(data.sentiment?.tendency, data.sentiment?.type);
+  const sentimentScore =
+    data.sentiment?.score !== undefined
+      ? clampScore(data.sentiment.score)
+      : data.sentiment?.intensity === '强'
+        ? 85
+        : data.sentiment?.intensity === '弱'
+          ? 45
+          : 65;
+
+  return {
+    qualityScore: clampScore(data.qualityScore),
+    seo: {
+      score: clampScore(data.seo?.score),
+      suggestions: seoSuggestions,
+      titleSuggestion: data.seo?.titleSuggestion,
+      keywords: data.seo?.keywords ?? [],
+      description: data.seo?.description,
+    },
+    readability: {
+      score: clampScore(data.readability?.score),
+      level: data.readability?.level || data.readability?.avgSentenceLength || '未知',
+      details: readabilityDetails,
+      paragraphStructure: data.readability?.paragraphStructure,
+      avgSentenceLength: data.readability?.avgSentenceLength,
+      vocabularyDiversity: data.readability?.vocabularyDiversity,
+    },
+    sentiment: {
+      type: sentimentType,
+      score: sentimentScore,
+      description: data.sentiment?.description || data.sentiment?.tendency || '暂无情感分析说明',
+      tendency: data.sentiment?.tendency,
+      intensity: data.sentiment?.intensity,
+    },
+    improvements: data.improvements ?? [],
+  };
 }
 
 // AI生成视频

@@ -23,6 +23,7 @@ import { Slider } from '@/components/ui/slider';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -35,6 +36,7 @@ import { RichTextEditor, type RichTextEditorHandle } from '@/components/editor/R
 import { FormattingPanel } from '@/components/editor/FormattingPanel';
 import { PhonePreview } from '@/components/editor/PhonePreview';
 import { WritingTemplates } from '@/components/editor/WritingTemplates';
+import { DomainTemplateSelector } from '@/components/editor/DomainTemplateSelector';
 import { ContentAnalysis } from '@/components/editor/ContentAnalysis';
 import { VersionHistory } from '@/components/editor/VersionHistory';
 import { ExportDialog } from '@/components/editor/ExportDialog';
@@ -45,11 +47,12 @@ import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import type { HotTopic, ArticleVersion, Article } from '@/types';
 import { markdownToHtml } from '@/lib/formatUtils';
+import type { DomainGenerationMode } from '@/lib/domainTemplates';
 
 export function EditorPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { settings, currentArticle, setCurrentArticle, loadArticle, addArticleVersion } = useAppStore();
+  const { settings, currentArticle, setCurrentArticle, loadArticle, addArticleVersion, pendingImageInserts } = useAppStore();
   const editorRef = useRef<RichTextEditorHandle>(null);
   const abortRef = useRef<AbortController | null>(null);
   const titleRef = useRef<string>('');
@@ -64,6 +67,8 @@ export function EditorPage() {
   const [imagePrompt, setImagePrompt] = useState('');
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
+  const [domainPrompt, setDomainPrompt] = useState('');
+  const [domainMode, setDomainMode] = useState<DomainGenerationMode>('article');
   const [activeSideTab, setActiveSideTab] = useState<string>('ai');
   
   // 快捷操作状态
@@ -76,10 +81,19 @@ export function EditorPage() {
   const { isGenerating, isGeneratingImage, handleGenerate, handleGenerateImage } = useAIGeneration();
 
   // 统一初始化：currentArticle 为唯一数据源，localStorage 仅为首次加载 fallback
-  const initKey = routeArticleId || currentArticle?.id || 'new';
+  const [keepNewEditorKey] = useState(() => !routeArticleId && pendingImageInserts.length > 0);
+  const initKey = routeArticleId || (keepNewEditorKey ? 'new' : currentArticle?.id) || 'new';
+  const editorInstanceKey = routeArticleId || (keepNewEditorKey ? 'new' : currentArticle?.id) || 'new';
   const prevInitKey = useRef<string>('');
   // topic 初始化单独追踪，因为 topic 分支会调用 setCurrentArticle 导致 initKey 变化
   const topicInitRef = useRef<string>('');
+
+  const syncEditorContent = useCallback((html: string) => {
+    const editor = editorRef.current?.getEditor();
+    if (editor && editor.getHTML() !== html) {
+      editor.commands.setContent(html || '', { emitUpdate: false });
+    }
+  }, []);
 
   useEffect(() => {
     // 取消前一个加载
@@ -87,44 +101,17 @@ export function EditorPage() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    if (topic) {
-      // topic 分支：用 topic 标题做 guard，避免 setCurrentArticle 导致 initKey 变化后重复执行
-      if (topicInitRef.current === topic.title) return;
-      topicInitRef.current = topic.title;
-      setContent('');
-      const newArticle: Article = {
-        id: uuidv4(),
-        title: `关于"${topic.title}"的公众号文章`,
-        content: '',
-        wordCount,
-        tags: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'draft',
-      };
-      setCurrentArticle(newArticle);
-      setTitle(newArticle.title);
-      setAdditionalPrompt(`请围绕热点话题"${topic.title}"写一篇公众号文章`);
-    } else {
-      // 非 topic 分支：用 initKey 做 guard
-      if (prevInitKey.current === initKey) return;
-      prevInitKey.current = initKey;
+    const initId = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
 
-      if (routeArticleId) {
-        const found = loadArticle(routeArticleId);
-        if (!controller.signal.aborted && found) {
-          setTitle(found.title);
-          setContent(found.content);
-          setWordCount(found.wordCount);
-        }
-      } else if (currentArticle) {
-        setTitle(currentArticle.title);
-        setContent(currentArticle.content);
-        setWordCount(currentArticle.wordCount);
-      } else {
+      if (topic) {
+        // topic 分支：用 topic 标题做 guard，避免 setCurrentArticle 导致 initKey 变化后重复执行
+        if (topicInitRef.current === topic.title) return;
+        topicInitRef.current = topic.title;
+        setContent('');
         const newArticle: Article = {
           id: uuidv4(),
-          title: '',
+          title: `关于"${topic.title}"的公众号文章`,
           content: '',
           wordCount,
           tags: [],
@@ -133,11 +120,47 @@ export function EditorPage() {
           status: 'draft',
         };
         setCurrentArticle(newArticle);
-      }
-    }
+        setTitle(newArticle.title);
+        setAdditionalPrompt(`请围绕热点话题"${topic.title}"写一篇公众号文章`);
+      } else {
+        // 非 topic 分支：用 initKey 做 guard
+        if (prevInitKey.current === initKey) return;
+        prevInitKey.current = initKey;
 
-    return () => controller.abort();
-  }, [initKey, topic]);
+        if (routeArticleId) {
+          const found = loadArticle(routeArticleId);
+          if (!controller.signal.aborted && found) {
+            setTitle(found.title);
+            setContent(found.content);
+            setWordCount(found.wordCount);
+            syncEditorContent(found.content);
+          }
+        } else if (currentArticle) {
+          setTitle(currentArticle.title);
+          setContent(currentArticle.content);
+          setWordCount(currentArticle.wordCount);
+          syncEditorContent(currentArticle.content);
+        } else {
+          const newArticle: Article = {
+            id: uuidv4(),
+            title: '',
+            content: '',
+            wordCount,
+            tags: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status: 'draft',
+          };
+          setCurrentArticle(newArticle);
+        }
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(initId);
+      controller.abort();
+    };
+  }, [currentArticle, initKey, loadArticle, routeArticleId, setCurrentArticle, syncEditorContent, topic, wordCount]);
 
   const handleSaveWithVersionCallback = useCallback(() => {
     saveNow();
@@ -161,6 +184,9 @@ export function EditorPage() {
   // 全局快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.ProseMirror')) {
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSaveWithVersionCallback();
@@ -178,12 +204,11 @@ export function EditorPage() {
     titleRef.current = title;
   }, [title]);
 
-  onGenerateRef.current = async () => {
+  const handleGenerateArticle = useCallback(async () => {
     // 保存内容快照，失败时恢复（从编辑器实时读取，不依赖闭包）
     const previousContent = editorRef.current?.getEditor()?.getHTML() || content;
-    // 使用 clearContent 清空编辑器准备接收流式内容
-    editorRef.current?.clearContent();
-    const prompt = `
+    // 等收到第一段生成内容后再替换，避免慢请求或失败时编辑区变空。
+    const prompt = domainPrompt || `
       ${additionalPrompt}
       要求：
       1. 字数约${wordCount}字
@@ -197,8 +222,13 @@ export function EditorPage() {
     `;
     try {
       let mdBuffer = '';
+      let hasStartedReplacing = false;
       await handleGenerate(prompt, wordCount, (chunk) => {
         if (!editorRef.current) return;
+        if (!hasStartedReplacing) {
+          editorRef.current.clearContent();
+          hasStartedReplacing = true;
+        }
         mdBuffer += chunk;
         // 按段落分隔（\n\n）flush，避免逐 token 插入导致碎片化换行
         const parts = mdBuffer.split('\n\n');
@@ -224,124 +254,13 @@ export function EditorPage() {
       const errorMessage = error instanceof Error ? error.message : 'AI 生成失败，请稍后重试';
       toast.error('生成失败', { description: errorMessage });
     }
-  };
+  }, [additionalPrompt, content, domainPrompt, handleGenerate, wordCount]);
+
+  useEffect(() => {
+    onGenerateRef.current = handleGenerateArticle;
+  }, [handleGenerateArticle]);
+
   const onGenerate = useCallback(() => onGenerateRef.current?.(), []);
-
-  // 通用 AI 优化函数（支持选中文字模式和全文模式）
-  // 可用于自定义优化指令，如：onRefineContent('将文章改为更正式的语气')
-  const onRefineContent = useCallback(async (instruction: string) => {
-    const editor = editorRef.current?.getEditor();
-    if (!editor) return;
-
-    // 获取选中信息
-    const selectionInfo = editorRef.current?.getSelectionInfo();
-    const hasSelection = selectionInfo && !selectionInfo.empty;
-    const selectedText = hasSelection ? editorRef.current?.getSelectedText() || '' : '';
-    
-    // 确定要处理的内容
-    const contentToProcess = hasSelection ? selectedText : (editor.getHTML() || content);
-    
-    if (!contentToProcess.trim()) {
-      toast.error('请先写点内容');
-      return;
-    }
-
-    // 保存当前内容用于撤销
-    const previousContent = editor.getHTML();
-    setLastRefinedContent(previousContent);
-    
-    // 设置处理状态
-    setIsRefining(true);
-    setRefineProgress('正在处理中...');
-
-    // 构建提示词
-    const prompt = hasSelection ? `
-      以下是需要优化的选中内容：
-      ${selectedText}
-
-      请根据以下要求处理上述内容：
-      ${instruction}
-
-      要求：
-      1. 直接输出处理后的内容，不要加任何说明
-      2. 适合公众号阅读的风格
-      3. 保持原文的核心观点和信息
-      4. 使用 Markdown 格式输出：标题用 # ## ###，加粗用 **文字**
-      5. 每个段落为连续文字，段落内不要换行，段落之间用空行分隔
-      6. 只输出优化后的内容，不要包含原文
-    ` : `
-      以下是原文内容：
-      ${contentToProcess.replace(/<[^>]*>/g, '\n')}
-
-      请根据以下要求处理上述内容：
-      ${instruction}
-
-      要求：
-      1. 直接输出处理后的内容，不要加任何说明
-      2. 适合公众号阅读的风格
-      3. 保持原文的核心观点和信息
-      4. 使用 Markdown 格式输出：标题用 # ## ###，加粗用 **文字**
-      5. 每个段落为连续文字，段落内不要换行，段落之间用空行分隔
-      6. 保持原文结构，不要改变主题
-    `;
-
-    try {
-      let resultContent = '';
-      
-      if (hasSelection) {
-        // 选中文字模式：收集完整结果后替换
-        await handleGenerate(prompt, Math.max(100, selectedText.length * 2), (chunk) => {
-          resultContent += chunk;
-          setRefineProgress('正在优化选中内容...');
-        });
-        
-        // 替换选中内容
-        if (editorRef.current && resultContent.trim()) {
-          editorRef.current.replaceSelectedContent(markdownToHtml(resultContent));
-        }
-      } else {
-        // 全文模式：清空编辑器，流式写入
-        editorRef.current?.clearContent();
-        
-        await handleGenerate(prompt, wordCount, (chunk) => {
-          if (!editorRef.current) return;
-          resultContent += chunk;
-          setRefineProgress('正在优化全文...');
-          
-          // 按段落分隔 flush
-          const parts = resultContent.split('\n\n');
-          resultContent = parts.pop() || '';
-          for (const part of parts) {
-            if (part.trim()) {
-              editorRef.current.appendContent(markdownToHtml(part + '\n\n'));
-            }
-          }
-        });
-        
-        // flush 剩余内容
-        if (resultContent.trim() && editorRef.current) {
-          editorRef.current.appendContent(markdownToHtml(resultContent));
-        }
-      }
-      
-      // 处理完成
-      setRefineProgress('');
-      setIsRefining(false);
-      toast.success('优化完成', {
-        description: '可以使用 Ctrl+Z 撤销此次操作',
-      });
-    } catch (error) {
-      // 恢复编辑器内容
-      if (editor) {
-        editor.commands.setContent(previousContent);
-      }
-      setContent(previousContent);
-      setRefineProgress('');
-      setIsRefining(false);
-      const errorMessage = error instanceof Error ? error.message : 'AI 处理失败，请稍后重试';
-      toast.error('处理失败', { description: errorMessage });
-    }
-  }, [wordCount, handleGenerate]);
 
   // 撤销快捷操作
   const handleUndoRefine = useCallback(() => {
@@ -427,10 +346,13 @@ export function EditorPage() {
           4. 每个段落为连续文字，段落内不要换行
         `;
 
-        editorRef.current?.clearContent();
-
+        let hasStartedReplacing = false;
         await handleGenerate(prompt, wordCount, (chunk) => {
           if (!editorRef.current) return;
+          if (!hasStartedReplacing) {
+            editorRef.current.clearContent();
+            hasStartedReplacing = true;
+          }
           resultContent += chunk;
           setRefineProgress('正在去除AI痕迹...');
 
@@ -576,6 +498,7 @@ export function EditorPage() {
   const handleRestoreVersion = (version: ArticleVersion) => {
     setTitle(version.title);
     setContent(version.content);
+    syncEditorContent(version.content);
     // 更新 currentArticle 的 updatedAt，避免数据不一致
     if (currentArticle) {
       setCurrentArticle({
@@ -588,23 +511,32 @@ export function EditorPage() {
     toast.success('已恢复到历史版本');
   };
 
+  const handleApplyFormattedContent = useCallback((formattedHtml: string) => {
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      editor.commands.setContent(formattedHtml, { emitUpdate: false });
+    }
+    setContent(formattedHtml);
+  }, []);
+
   const charCount = content.replace(/<[^>]*>/g, '').length;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7rem)]">
+    <div className="flex min-w-0 flex-col md:h-[calc(100vh-7rem)]">
       {/* ========== 顶部栏 ========== */}
-      <div className="flex items-center justify-between px-6 py-3 bg-card/80 backdrop-blur-sm border-b">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 border-b bg-card/80 px-3 py-3 backdrop-blur-sm sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={() => navigate(-1)} 
-            className="h-9 w-9 rounded-lg hover:bg-muted transition-colors"
+            className="h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-muted"
+            aria-label="返回上一页"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="relative flex-1 min-w-[300px] max-w-[500px]">
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
+          <div className="relative min-w-0 flex-1 lg:min-w-[300px] lg:max-w-[500px]">
             <Input
               placeholder="输入文章标题..."
               value={title}
@@ -642,7 +574,7 @@ export function EditorPage() {
             ) : saveStatus === 'unsaved' ? '未保存' : '已保存'}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button 
             variant="ghost" 
             size="sm" 
@@ -670,12 +602,12 @@ export function EditorPage() {
       </div>
 
       {/* ========== 主体区域 ========== */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
         {/* ===== 左侧：编辑器 ===== */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-[60vh] flex-1 overflow-y-auto lg:min-h-0">
             <RichTextEditor
-              key={currentArticle?.id || 'new'}
+              key={editorInstanceKey}
               ref={editorRef}
               content={content}
               onChange={setContent}
@@ -684,8 +616,8 @@ export function EditorPage() {
             />
           </div>
           {/* 底部状态栏 */}
-          <div className="flex items-center justify-between px-6 py-2 text-xs text-muted-foreground border-t bg-muted/20 backdrop-blur-sm">
-            <div className="flex items-center gap-5">
+          <div className="flex flex-col gap-2 border-t bg-muted/20 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5">
               <div className="flex items-center gap-2">
                 <span className="tabular-nums font-medium">{charCount.toLocaleString()}</span>
                 <span>字</span>
@@ -715,7 +647,7 @@ export function EditorPage() {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50">
                 <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-background border border-border/50 font-mono">⌘S</kbd>
                 <span>保存</span>
@@ -729,7 +661,7 @@ export function EditorPage() {
         </div>
 
         {/* ===== 右侧面板 ===== */}
-        <div className="w-80 border-l bg-card/50 backdrop-blur-sm overflow-y-auto">
+        <div className="w-full border-t bg-card/50 backdrop-blur-sm lg:w-80 lg:border-l lg:border-t-0 lg:overflow-y-auto">
           <Tabs value={activeSideTab} onValueChange={setActiveSideTab} className="w-full">
             <TabsList className="w-full grid grid-cols-4 h-12 rounded-none border-b bg-transparent p-1">
               <TabsTrigger 
@@ -779,13 +711,21 @@ export function EditorPage() {
                   max={5000}
                   step={100}
                 />
-                <Textarea
-                  placeholder="补充要求（选填）..."
-                  value={additionalPrompt}
-                  onChange={(e) => setAdditionalPrompt(e.target.value)}
-                  className="min-h-[50px] text-sm resize-none"
-                />
-                <Button
+	                <Textarea
+	                  placeholder="补充要求（选填）..."
+	                  value={domainPrompt || additionalPrompt}
+	                  onChange={(e) => {
+	                    setDomainPrompt('');
+	                    setAdditionalPrompt(e.target.value);
+	                  }}
+	                  className="min-h-[50px] text-sm resize-none"
+	                />
+	                {domainPrompt && (
+	                  <Badge variant="secondary" className="w-fit text-[10px]">
+	                    已应用领域模板 · {domainMode === 'title' ? '标题' : domainMode === 'outline' ? '大纲' : '完整文章'}
+	                  </Badge>
+	                )}
+	                <Button
                   className="w-full"
                   size="sm"
                   onClick={onGenerate}
@@ -799,9 +739,22 @@ export function EditorPage() {
                 </Button>
               </div>
 
-              <Separator />
+	              <Separator />
 
-              {/* AI 配图 */}
+	              <DomainTemplateSelector
+	                onApply={({ template, mode, topic, prompt }) => {
+	                  setDomainPrompt(prompt);
+	                  setDomainMode(mode);
+	                  setWordCount(template.wordCount.recommended);
+	                  setAdditionalPrompt(topic || template.name);
+	                  setTitle((prev) => prev || `${template.name}：${topic || template.exampleTitles[0]}`);
+	                  toast.success(`已应用「${template.name}」模板`);
+	                }}
+	              />
+
+	              <Separator />
+
+	              {/* AI 配图 */}
               <div className="space-y-2.5">
                 <Label className="text-xs font-medium flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5" /> AI 配图
@@ -815,6 +768,9 @@ export function EditorPage() {
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>AI 生成图片</DialogTitle>
+                      <DialogDescription>
+                        输入配图描述后生成一张可插入当前文章的图片。
+                      </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                       <Textarea
@@ -904,7 +860,7 @@ export function EditorPage() {
 
             {/* ---- 排版 ---- */}
             <TabsContent value="format" className="p-3 mt-0">
-              <FormattingPanel content={content} onApplyFormat={setContent} />
+              <FormattingPanel content={content} onApplyFormat={handleApplyFormattedContent} />
             </TabsContent>
 
             {/* ---- 分析 ---- */}

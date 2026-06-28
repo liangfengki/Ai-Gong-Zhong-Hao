@@ -50,11 +50,12 @@ export function useAutoSave(title: string, content: string, wordCount: number) {
   useEffect(() => {
     if (!title && !content) return;
 
-    setSaveStatus('unsaved');
+    const statusId = window.setTimeout(() => setSaveStatus('unsaved'), 0);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => doSave(title, content, wordCount), 3000);
 
     return () => {
+      window.clearTimeout(statusId);
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         // 卸载前立即保存，防止防抖窗口期内的修改丢失

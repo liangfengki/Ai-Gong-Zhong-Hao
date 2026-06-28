@@ -5,21 +5,39 @@ dotenv.config();
 
 const { Pool } = pg;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // Railway 的 PostgreSQL 需要 SSL
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false,
-});
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const pool = hasDatabaseUrl
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      // Railway 的 PostgreSQL 需要 SSL
+      ssl: process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
+    })
+  : null;
+
+let databaseAvailable = hasDatabaseUrl;
 
 // 包装查询方法
 export function query(text, params) {
+  if (!pool) {
+    throw new Error('未配置 DATABASE_URL');
+  }
   return pool.query(text, params);
+}
+
+export function isDatabaseAvailable() {
+  return databaseAvailable;
 }
 
 // 初始化数据库：建表
 export async function initDB() {
+  if (!hasDatabaseUrl) {
+    databaseAvailable = false;
+    console.warn('⚠️  未设置 DATABASE_URL，文档 API 将使用本地文件 fallback 存储');
+    return;
+  }
+
   try {
     await query(`
       CREATE TABLE IF NOT EXISTS documents (
@@ -39,14 +57,11 @@ export async function initDB() {
     `);
 
     console.log('✅ PostgreSQL 数据库初始化完成');
+    databaseAvailable = true;
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error.message);
-    // 没有 DATABASE_URL 时降级为日志提示，不阻塞启动
-    if (!process.env.DATABASE_URL) {
-      console.warn('⚠️  未设置 DATABASE_URL，文档功能将不可用');
-    } else {
-      throw error;
-    }
+    databaseAvailable = false;
+    throw error;
   }
 }
 

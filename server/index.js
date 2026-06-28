@@ -35,7 +35,7 @@ app.use(helmet({
 // CORS配置 - 生产环境严格限制
 const corsOrigins = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : ['http://localhost:7658', 'http://localhost:5173', 'http://localhost:3000'];
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' ? corsOrigins : true,
@@ -79,7 +79,7 @@ app.use((req, res, next) => {
 // 全局限流：每 IP 每分钟 100 次
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: Number(process.env.RATE_LIMIT_PER_MINUTE) || 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '请求过于频繁，请稍后再试' },
@@ -89,12 +89,12 @@ app.use(globalLimiter);
 // AI 接口更严格的限流：每 IP 每分钟 10 次
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'AI 生成请求过于频繁，请稍后再试' },
 });
-app.use('/ai', aiLimiter);
+app.use('/api/ai', aiLimiter);
 
 // ============ 健康检查 ============
 
@@ -177,10 +177,10 @@ async function start() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-    console.log(`📝 热点API: http://localhost:${PORT}/baidu/hot`);
-    console.log(`🖼️  图片API: http://localhost:${PORT}/unsplash/search`);
-    console.log(`🤖 AI API: http://localhost:${PORT}/ai/generate`);
-    console.log(`📄 文档API: http://localhost:${PORT}/documents`);
+    console.log(`📝 热点API: http://localhost:${PORT}/api/baidu/hot`);
+    console.log(`🖼️  图片API: http://localhost:${PORT}/api/unsplash/search`);
+    console.log(`🤖 AI API: http://localhost:${PORT}/api/ai/generate`);
+    console.log(`📄 文档API: http://localhost:${PORT}/api/documents`);
     console.log(`❤️  健康检查: http://localhost:${PORT}/health`);
   });
 }

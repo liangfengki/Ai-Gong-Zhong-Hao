@@ -1,77 +1,37 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+公众号 AI 写作平台：用于追踪热点、按领域模板生成公众号文章、配图、编辑和一键排版复制。
 
-## Project Overview
+## Project Map
 
-公众号 AI 写作平台 — a WeChat Official Account article writing platform with hot topic tracking, AI generation, image library, and one-click formatting.
+| Path | Purpose |
+| --- | --- |
+| `app/` | React + TypeScript + Vite 前端，端口 `7658`，所有业务请求走 `/api/*`。 |
+| `server/` | Express 后端，端口 `6356`，负责热点代理、AI 生成、图片代理、文档 API、缓存和安全中间件。 |
+| `dailyhot-api/` | 第三方热点聚合服务，端口 `6688`，独立仓库，除非明确要求不要直接修改。 |
+| `spec/` | 产品规格和验收标准。 |
+| `start.sh` | 本地一键启动三服务。 |
 
-## Architecture
-
-Three services run together (see `start.sh`):
-
-| Service | Port | Description |
-|---------|------|-------------|
-| `dailyhot-api/` | 6688 | Third-party hot topic aggregator ([imsyy/DailyHotApi](https://github.com/imsyy/DailyHotApi)). Standalone git repo, don't modify directly. |
-| `server/` | 6356 | Express proxy server. Forwards hot topic requests to DailyHotApi, proxies image search (Unsplash/Pexels/Pixabay), and handles AI generation (OpenAI-compatible API). |
-| `app/` | 5173 | React frontend (Vite). All API calls go through `/api/*` which Vite proxies to `localhost:6356`. |
-
-**Request flow:** Frontend → `/api/*` → Vite proxy → `server/index.js` → DailyHotApi / external APIs
+请求流：`app` → `/api/*` → Vite proxy → `server` → DailyHotApi / AI API / 图片 API / 数据库。
 
 ## Commands
 
 ```bash
-# Start all three services
 ./start.sh
 
-# Frontend only (app/)
 cd app && npm run dev
-cd app && npm run build        # tsc -b && vite build
-cd app && npm run lint         # eslint
+cd app && npm run build
+cd app && npm run lint
+cd app && npx vitest run --reporter verbose
 
-# Backend only (server/)
-cd server && npm run dev       # node --watch index.js
-cd server && npm start         # node index.js
-
-# DailyHotApi
-cd dailyhot-api && npm run dev
+cd server && npm run dev
+cd server && npm start
 ```
 
-## Frontend (app/)
+## Rules
 
-- **Path alias:** `@/` maps to `src/`
-- **State:** Zustand store in `stores/useAppStore.ts`, persisted to localStorage as `wechat-writer-storage`
-- **Routing:** React Router v7, pages lazy-loaded in `App.tsx`
-- **UI:** shadcn/ui components in `components/ui/`, Tailwind CSS
-- **Rich text editor:** TipTap (`components/editor/RichTextEditor.tsx`)
-- **API layer:** `services/api.ts` — all backend calls go through `/api` prefix
-- **Formatting:** `services/formatting.ts` — Markdown-to-WeChat-HTML conversion
-- **Types:** `types/index.ts` — `HotTopic`, `Article`, `Document`, `ImageAsset`, `UserSettings`, `ArticleVersion`, etc.
-- **Hooks:** `hooks/useAIGeneration.ts` (AI streaming), `hooks/useAutoSave.ts`, `hooks/useArticleActions.ts`, `hooks/useDocumentState.ts` (document CRUD with undo/redo)
-
-### Testing
-
-```bash
-cd app && npx vitest run          # run all tests
-cd app && npx vitest run --reporter verbose  # verbose output
-cd app && npx vitest              # watch mode
-```
-
-- **Framework:** Vitest with happy-dom environment
-- **Setup:** `src/setup.ts` (imports `@testing-library/jest-dom/vitest`)
-- **Config:** `vitest.config.ts` at project root (globals enabled)
-- **Mocking:** Use `vi.hoisted()` for module-level mocks (vitest hoists `vi.mock` calls)
-
-## Server (server/)
-
-Single-file Express server (`index.js`). Key patterns:
-
-- **AI config from headers:** Frontend sends `x-api-key`, `x-base-url`, `x-model` headers; server falls back to `.env` values
-- **Base URL normalization:** Server auto-appends `/v1` to base URLs if missing
-- **Default AI provider:** DeepSeek (`https://api.deepseek.com/v1`, model `deepseek-chat`)
-- **Image API fallback:** When no API keys configured, falls back to Lorem Picsum placeholder images
-- **Hot topic proxy:** `proxyHotApi()` fetches from DailyHotApi and normalizes the response format
-
-## Environment Variables (server/.env)
-
-See `server/.env.example`. Key ones: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `DEFAULT_MODEL`, `UNSPLASH_ACCESS_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`.
+- 不修改 `dailyhot-api/`，除非任务明确要求处理第三方热点服务。
+- 前端 API 统一放在 `app/src/services/api.ts`，不要绕过 `/api` 直连后端或外部服务。
+- 领域写作模板以内置配置为主：`app/src/lib/domainTemplates.ts`。
+- 公众号排版相关 HTML 必须经过安全渲染边界，优先使用 `SafeHtml`。
+- 交付前至少运行：`npm run build`、`npm run lint`、`npx vitest run --reporter verbose`。

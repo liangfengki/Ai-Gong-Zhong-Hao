@@ -87,7 +87,7 @@ function processInline(text: string): string {
   // First, extract inline code spans so their content isn't processed
   const codeSpans: string[] = [];
   let processed = text.replace(/`([^`]+)`/g, (_, code) => {
-    const placeholder = `\x00CODE${codeSpans.length}\x00`;
+    const placeholder = `__CODE_SPAN_${codeSpans.length}__`;
     codeSpans.push(`<code>${escapeHtml(code)}</code>`);
     return placeholder;
   });
@@ -103,7 +103,7 @@ function processInline(text: string): string {
   processed = processed.replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
 
   // Restore inline code spans
-  processed = processed.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codeSpans[Number(idx)]);
+  processed = processed.replace(/__CODE_SPAN_(\d+)__/g, (_, idx) => codeSpans[Number(idx)]);
 
   return processed;
 }
@@ -122,7 +122,7 @@ export function markdownToHtml(md: string): string {
   if (!md) return '';
 
   // Normalize line endings
-  let text = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const text = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // Split into lines for block-level processing
   const lines = text.split('\n');

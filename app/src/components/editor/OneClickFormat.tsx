@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -42,14 +43,20 @@ export function OneClickFormat({ onApplyStyle }: OneClickFormatProps) {
             <Sparkles className="h-5 w-5 text-purple-500" />
             一键排版 - 选择风格
           </DialogTitle>
+          <DialogDescription>
+            选择一个排版风格后，会立即应用到编辑器当前内容。
+          </DialogDescription>
         </DialogHeader>
         
         <ScrollArea className="h-[60vh] pr-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {styleTemplates.map((template) => (
-              <div
+              <button
                 key={template.id}
-                className={`relative cursor-pointer rounded-xl border-2 p-4 transition-all duration-200 ${
+                type="button"
+                aria-label={`应用${template.name}排版风格`}
+                aria-pressed={selectedId === template.id}
+                className={`relative rounded-xl border-2 p-4 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   selectedId === template.id
                     ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 shadow-lg'
                     : hoveredId === template.id
@@ -105,7 +112,7 @@ export function OneClickFormat({ onApplyStyle }: OneClickFormatProps) {
                     }}
                   />
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </ScrollArea>
