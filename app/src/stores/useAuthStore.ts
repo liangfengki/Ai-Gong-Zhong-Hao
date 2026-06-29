@@ -38,6 +38,7 @@ interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  authReady: boolean;
 
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string, code: string, username?: string) => Promise<{ success: boolean; error?: string }>;
@@ -55,6 +56,7 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      authReady: false,
 
       requestCode: async (email: string) => {
         try {
@@ -68,7 +70,7 @@ export const useAuthStore = create<AuthStore>()(
       register: async (email: string, password: string, code: string, username?: string) => {
         try {
           const { data } = await axios.post(`${PROXY_BASE}/auth/register/verify`, { email, password, code, username });
-          set({ user: data.user, token: data.token, isAuthenticated: true });
+          set({ user: data.user, token: data.token, isAuthenticated: true, authReady: true });
           return { success: true };
         } catch (error: unknown) {
           return { success: false, error: getErrorMessage(error, '注册失败') };
@@ -78,7 +80,7 @@ export const useAuthStore = create<AuthStore>()(
       login: async (email: string, password: string) => {
         try {
           const { data } = await axios.post(`${PROXY_BASE}/auth/login`, { email, password });
-          set({ user: data.user, token: data.token, isAuthenticated: true });
+          set({ user: data.user, token: data.token, isAuthenticated: true, authReady: true });
           return { success: true };
         } catch (error: unknown) {
           return { success: false, error: getErrorMessage(error, '登录失败') };
@@ -86,7 +88,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false, authReady: true });
       },
 
       changePassword: async (oldPassword: string, newPassword: string) => {
@@ -105,15 +107,18 @@ export const useAuthStore = create<AuthStore>()(
 
       loadUser: async () => {
         const { token } = get();
-        if (!token) return;
+        if (!token) {
+          set({ user: null, isAuthenticated: false, authReady: true });
+          return;
+        }
 
         try {
           const { data } = await axios.get(`${PROXY_BASE}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          set({ user: data.user, isAuthenticated: true });
+          set({ user: data.user, isAuthenticated: true, authReady: true });
         } catch {
-          set({ user: null, token: null, isAuthenticated: false });
+          set({ user: null, token: null, isAuthenticated: false, authReady: true });
         }
       },
     }),

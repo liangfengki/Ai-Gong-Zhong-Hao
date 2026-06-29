@@ -24,8 +24,15 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, authReady } = useAuthStore();
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        正在恢复登录状态...
+      </div>
+    );
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
