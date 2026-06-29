@@ -32,3 +32,4 @@ server/data/
 # DailyHotApi
 dailyhot-api/logs/
 dailyhot-api/.env
+.vercel
