@@ -14,6 +14,7 @@ import {
   Download,
   Upload,
   Database,
+  Lock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAppStore } from '@/stores/useAppStore';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { getAuthHeaders } from '@/services/api';
 import type { WechatTemplate, AIProviderPreset, UserSettings } from '@/types';
 
 // ============ 内置中转站预设 ============
@@ -135,6 +138,35 @@ export function validateAIConnectionConfig(settings: UserSettings): { ok: true }
 
 export function SettingsPage() {
   const { settings, updateSettings, articles, exportData, importData } = useAppStore();
+  const { user, changePassword } = useAuthStore();
+
+  // 修改密码表单状态
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword) {
+      toast.error('请填写完整', { description: '旧密码和新密码不能为空' });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error('密码不一致', { description: '两次输入的新密码不一致' });
+      return;
+    }
+    setIsChangingPassword(true);
+    const result = await changePassword(oldPassword, newPassword);
+    setIsChangingPassword(false);
+    if (result.success) {
+      toast.success('修改成功', { description: '密码已更新' });
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } else {
+      toast.error('修改失败', { description: result.error });
+    }
+  };
 
   // 测试连接状态（纯 UI 状态，不需要持久化）
   const [isTesting, setIsTesting] = useState(false);
@@ -194,6 +226,7 @@ export function SettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           ...(settings.ai.apiKey && { 'x-api-key': settings.ai.apiKey }),
           'x-base-url': settings.ai.baseUrl,
           'x-model': settings.ai.model,
@@ -300,6 +333,7 @@ export function SettingsPage() {
           <TabsTrigger value="templates" className="gap-2"><Palette className="h-4 w-4" />排版模板</TabsTrigger>
           <TabsTrigger value="skills" className="gap-2"><Sparkles className="h-4 w-4" />内置技能</TabsTrigger>
           <TabsTrigger value="data" className="gap-2"><Database className="h-4 w-4" />数据管理</TabsTrigger>
+          <TabsTrigger value="account" className="gap-2"><Lock className="h-4 w-4" />账号安全</TabsTrigger>
         </TabsList>
 
         {/* ============ AI 配置 ============ */}
@@ -696,6 +730,64 @@ export function SettingsPage() {
                     选择文件
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ============ 账号安全 ============ */}
+        <TabsContent value="account">
+          <Card>
+            <CardHeader>
+              <CardTitle>账号安全</CardTitle>
+              <CardDescription>查看账号信息并修改密码</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* 账号信息 */}
+              <div className="space-y-2">
+                <Label>当前登录邮箱</Label>
+                <Input value={user?.email || ''} disabled className="font-mono" />
+              </div>
+
+              <Separator />
+
+              {/* 修改密码 */}
+              <div className="space-y-4">
+                <h4 className="font-medium">修改密码</h4>
+                <div className="space-y-2">
+                  <Label htmlFor="oldPassword">旧密码</Label>
+                  <Input
+                    id="oldPassword"
+                    type="password"
+                    placeholder="输入当前密码"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">新密码</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    placeholder="输入新密码"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmNewPassword">确认新密码</Label>
+                  <Input
+                    id="confirmNewPassword"
+                    type="password"
+                    placeholder="再次输入新密码"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  />
+                </div>
+                <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                  {isChangingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  修改密码
+                </Button>
               </div>
             </CardContent>
           </Card>

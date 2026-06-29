@@ -1,10 +1,13 @@
 {
-  "name": "ai-wechat-server",
+  "name": "ai-wechat-writer",
   "version": "1.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "build": "npm run build --prefix app",
+    "lint": "npm run lint --prefix app",
+    "test": "npx --prefix app vitest run --reporter verbose",
+    "start": "npm start --prefix server"
   },
   "dependencies": {
     "axios": "^1.6.0",

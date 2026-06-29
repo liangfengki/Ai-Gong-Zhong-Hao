@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getAIConfig, generateArticle, generateArticleStream, generateImage, createVideoTask, getVideoStatus, analyzeContent } from '../services/aiService.js';
 import { aiValidation } from '../middleware/validation.js';
 import { optionalAuth } from '../middleware/auth.js';
+import { recordUsage } from '../services/userStore.js';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.post('/generate', aiValidation.generate, optionalAuth, async (req, res) =
       model,
       wordCount: content.length,
     });
+    recordUsage('generate_article', req.user).catch(() => {});
   } catch (error) {
     console.error('AI生成失败:', {
       requestId: req.id,
@@ -56,6 +58,7 @@ router.post('/generate/stream', aiValidation.generate, optionalAuth, async (req,
       res,
       requestId: req.id,
     });
+    recordUsage('generate_article', req.user).catch(() => {});
   } catch (error) {
     console.error('AI流式生成失败:', {
       requestId: req.id,
@@ -94,6 +97,7 @@ router.post('/generate-image', aiValidation.generateImage, optionalAuth, async (
       prompt,
       size: size || '1024x1024',
     });
+    recordUsage('generate_image', req.user).catch(() => {});
   } catch (error) {
     console.error('AI图片生成失败:', {
       requestId: req.id,
@@ -151,6 +155,7 @@ router.post('/generate-video', aiValidation.generateVideo, optionalAuth, async (
           || status.data?.url
           || status.output?.video_url
           || status.video_url;
+        recordUsage('generate_video', req.user).catch(() => {});
         return res.json({ url: videoUrl, status: 'completed', taskId });
       }
 
@@ -209,6 +214,7 @@ router.post('/analyze-content', aiValidation.analyzeContent, optionalAuth, async
       requestId: req.id,
       model,
     });
+    recordUsage('analyze_content', req.user).catch(() => {});
   } catch (error) {
     console.error('AI分析失败:', {
       requestId: req.id,

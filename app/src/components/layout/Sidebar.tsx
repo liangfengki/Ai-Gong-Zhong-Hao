@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   PenTool,
@@ -17,12 +17,14 @@ import {
   Moon,
   Sun,
   Monitor,
+  LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/stores/useAppStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 
@@ -74,7 +76,9 @@ const skillItems = [
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { sidebarOpen, toggleSidebar, settings, toggleDarkMode, toggleFollowSystemTheme } = useAppStore();
+  const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Apply dark mode on mount and listen for system changes
@@ -264,7 +268,21 @@ export function Sidebar() {
 
           {/* Footer */}
           {sidebarOpen && (
-            <div className="border-t p-4">
+            <div className="border-t p-4 space-y-2">
+              {user && (
+                <div className="text-xs text-muted-foreground truncate">
+                  {user.username || user.email}
+                </div>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-muted-foreground"
+                onClick={() => { logout(); navigate('/login'); }}
+              >
+                <LogOut className="h-4 w-4" />
+                退出登录
+              </Button>
               <div className="text-xs text-muted-foreground">
                 公众号AI写作平台 v1.0
               </div>
@@ -381,7 +399,21 @@ export function Sidebar() {
           </ScrollArea>
 
           {/* Footer */}
-          <div className="border-t p-4">
+          <div className="border-t p-4 space-y-2">
+            {user && (
+              <div className="text-xs text-muted-foreground truncate">
+                {user.email}
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2 text-muted-foreground"
+              onClick={() => { logout(); navigate('/login'); setMobileOpen(false); }}
+            >
+              <LogOut className="h-4 w-4" />
+              退出登录
+            </Button>
             <div className="text-xs text-muted-foreground">
               公众号AI写作平台 v1.0
             </div>

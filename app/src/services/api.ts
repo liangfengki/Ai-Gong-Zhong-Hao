@@ -122,6 +122,53 @@ const PROXY_BASE = '/api';
 const HOT_SOURCE_TIMEOUT_MS = 3500;
 const AI_STREAM_TIMEOUT_MS = 45000;
 
+export function getAuthHeaders(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('auth-storage');
+    if (!raw) return {};
+    const token = JSON.parse(raw)?.state?.token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+// 请求拦截器：自动附加认证 token
+axios.interceptors.request.use((config) => {
+  try {
+    config.headers = config.headers || {};
+    // 已显式指定 Authorization（如管理后台）时不覆盖
+    if (config.headers.Authorization) {
+      return config;
+    }
+    Object.assign(config.headers, getAuthHeaders());
+  } catch {
+    // 忽略解析错误
+  }
+  return config;
+});
+
+// 响应拦截器：401 时清除登录态并跳转登录页
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url: string = error.config?.url || '';
+    // 管理后台有独立鉴权，跳过全局 401 处理
+    if (error.response?.status === 401 && !url.includes('/admin')) {
+      try {
+        localStorage.removeItem('auth-storage');
+      } catch {
+        // 忽略
+      }
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/register' && path !== '/admin-ki') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ============ 热点API ============
 
 // 简单的哈希函数，用于生成稳定的 ID
@@ -386,7 +433,7 @@ export async function generateArticleStream(
   try {
     response = await fetch(`${PROXY_BASE}/ai/generate/stream`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, ...getAuthHeaders() },
       body: JSON.stringify({ prompt, wordCount }),
       signal: controller.signal,
     });
@@ -608,4 +655,26 @@ export async function updateDocument(req: UpdateDocumentRequest): Promise<Docume
 
 export async function deleteDocument(id: string): Promise<void> {
   await axios.delete(`${PROXY_BASE}/documents/${id}`);
+}
+
+// ============ 数据迁移 ============
+
+export async function migrateLocalArticles(
+  articles: Array<{ title: string; content: string }>
+): Promise<{ migrated: number; failed: number }> {
+  let migrated = 0;
+  let failed = 0;
+  for (const article of articles) {
+    try {
+      await createDocument({
+        title: article.title || '无标题',
+        content: article.content || '',
+      });
+      migrated++;
+    } catch (error) {
+      console.error('迁移文章失败:', error);
+      failed++;
+    }
+  }
+  return { migrated, failed };
 }

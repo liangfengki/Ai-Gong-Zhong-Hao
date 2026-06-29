@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/sonner';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -8,6 +9,10 @@ import { EditorPage } from '@/pages/EditorPage';
 import { ArticleListPage } from '@/pages/ArticleListPage';
 import { ImageLibraryPage } from '@/pages/ImageLibraryPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { LoginPage } from '@/pages/LoginPage';
+import { RegisterPage } from '@/pages/RegisterPage';
+import { AdminPage } from '@/pages/AdminPage';
+import { useAuthStore } from '@/stores/useAuthStore';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -19,12 +24,29 @@ const queryClient = new QueryClient({
   },
 });
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
 function App() {
+  const { loadUser } = useAuthStore();
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
         <Routes>
-          <Route path="/" element={<MainLayout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/admin-ki" element={<AdminPage />} />
+          <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route index element={<DashboardPage />} />
             <Route path="topics" element={<HotTopicsPage />} />
             <Route path="editor" element={<EditorPage />} />

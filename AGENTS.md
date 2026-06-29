@@ -30,8 +30,22 @@ cd server && npm start
 
 ## Rules
 
-- 不修改 `dailyhot-api/`，除非任务明确要求处理第三方热点服务。
+- 不直接修改 `dailyhot-api/`，除非任务明确要求处理第三方热点服务。
 - 前端 API 统一放在 `app/src/services/api.ts`，不要绕过 `/api` 直连后端或外部服务。
 - 领域写作模板以内置配置为主：`app/src/lib/domainTemplates.ts`。
 - 公众号排版相关 HTML 必须经过安全渲染边界，优先使用 `SafeHtml`。
 - 交付前至少运行：`npm run build`、`npm run lint`、`npx vitest run --reporter verbose`。
+
+## Auth System
+
+| Path | Purpose |
+| --- | --- |
+| `server/routes/auth.js` | 认证路由：注册、登录、修改密码。 |
+| `server/services/emailService.js` | 邮件发送服务，负责发送验证码。 |
+| `app/src/stores/useAuthStore.ts` | 前端认证状态管理。 |
+| `app/src/pages/LoginPage.tsx` | 登录页面。 |
+| `app/src/pages/RegisterPage.tsx` | 注册页面。 |
+| `server/routes/admin.js` | 后台管理路由：管理员登录、统计、用户列表。 |
+| `app/src/pages/AdminPage.tsx` | 后台管理页面，独立路由 `/admin-ki`。 |
+
+后台管理：路径 `/admin-ki`，使用独立管理员账号密码登录（env `ADMIN_USERNAME`/`ADMIN_PASSWORD`），签发独立 admin JWT，与普通用户体系隔离。AI 生成通过 `usage_logs` 表埋点统计。

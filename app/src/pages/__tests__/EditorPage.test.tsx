@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { EditorPage } from '@/pages/EditorPage';
 import { useAppStore } from '@/stores/useAppStore';
@@ -67,12 +67,14 @@ describe('EditorPage', () => {
     });
 
     const editor = document.querySelector('.ProseMirror');
-    editor?.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 's',
-      metaKey: true,
-      bubbles: true,
-      cancelable: true,
-    }));
+    act(() => {
+      editor?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 's',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
 
     await waitFor(() => {
       const versions = useAppStore.getState().articleVersions;

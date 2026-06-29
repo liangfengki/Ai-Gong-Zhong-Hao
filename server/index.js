@@ -4,13 +4,15 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 import { initDB } from './db.js';
 import hotRoutes from './routes/hot.js';
 import imageRoutes from './routes/images.js';
 import aiRoutes from './routes/ai.js';
 import documentRoutes from './routes/documents.js';
+import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
 
 dotenv.config();
 
@@ -109,6 +111,8 @@ app.use('/api', hotRoutes);
 app.use('/api', imageRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ============ 静态文件服务（前端 SPA） ============
 
@@ -117,6 +121,7 @@ app.use(express.static(publicDir));
 
 // SPA fallback：所有非 API 请求返回 index.html
 app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path === '/health') return next();
   // 只处理 HTML 请求（非文件扩展名）
   if (req.path.includes('.')) return next();
   res.sendFile(path.join(publicDir, 'index.html'), (err) => {
@@ -185,7 +190,14 @@ async function start() {
   });
 }
 
-start().catch(err => {
-  console.error('启动失败:', err);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  start().catch(err => {
+    console.error('启动失败:', err);
+    process.exit(1);
+  });
+}
+
+export { app, start };
+export default app;

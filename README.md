@@ -20,7 +20,7 @@ chmod +x start.sh
 ./start.sh
 ```
 
-启动后访问 http://localhost:5173
+启动后访问 http://localhost:7658
 
 ### 手动启动
 
@@ -33,7 +33,7 @@ cd dailyhot-api && npx tsx src/index.ts
 # 终端2 - 后端服务（端口 6356）
 cd server && node index.js
 
-# 终端3 - 前端服务（端口 5173）
+# 终端3 - 前端服务（端口 7658）
 cd app && npm run dev
 ```
 
@@ -94,6 +94,45 @@ ai公众号写作/
 
 ## 📦 构建部署
 
+### Vercel 部署
+
+项目已包含根目录 `vercel.json`。推送到 GitHub 后，在 Vercel 导入仓库即可：
+
+- Build Command: `cd app && npm run build`
+- Output Directory: `app/dist`
+- API: `/api/*` 会转发到 `api/index.js`，由 Express 后端处理。
+
+生产环境至少配置这些环境变量：
+
+```env
+DATABASE_URL=postgresql://...
+JWT_SECRET=生成一个足够长的随机字符串
+ADMIN_USERNAME=你的管理员账号
+ADMIN_PASSWORD=你的管理员密码
+ADMIN_JWT_SECRET=生成另一个足够长的随机字符串
+CORS_ORIGIN=https://你的-vercel-域名.vercel.app
+```
+
+注册邮箱验证码还需要：
+
+```env
+BREVO_API_KEY=xkeysib-...
+MAIL_FROM=已在 Brevo 验证的发件邮箱
+MAIL_FROM_NAME=公众号AI写作
+```
+
+AI 默认模型如需服务端统一配置：
+
+```env
+DEFAULT_API_KEY=your-api-key
+DEFAULT_MODEL=agnes-2.0-flash
+OPENAI_BASE_URL=https://apihub.agnes-ai.com/v1
+```
+
+注意：Vercel Serverless 不适合长时间流式任务，文章流式生成已设置前端 45 秒超时；如果后续视频生成或长文生成经常超过 60 秒，建议把 `server/` 单独部署到 Railway/Render/Fly.io，再让前端调用该后端域名。
+
+### 本地构建
+
 ```bash
 # 前端构建
 cd app && npm run build
@@ -102,4 +141,4 @@ cd app && npm run build
 cd server && node index.js
 ```
 
-前端构建产物在 `app/dist/`，可部署到任何静态服务器。
+前端构建产物在 `app/dist/`。Docker 部署可直接使用根目录 `Dockerfile`，会把前端构建产物复制到 Express 的 `server/public`。

@@ -1,5 +1,8 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // JWT密钥 - 生产环境必须从环境变量读取
 const JWT_SECRET = process.env.JWT_SECRET || (
