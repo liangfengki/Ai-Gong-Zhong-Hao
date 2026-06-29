@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { normalizeErrorPayload } from '@/stores/useAuthStore';
 
 const ADMIN_TOKEN_KEY = 'admin-ki-token';
 
@@ -45,7 +46,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.error || fallback;
+    return normalizeErrorPayload(error.response?.data?.error ?? error.response?.data, fallback);
   }
   return fallback;
 }

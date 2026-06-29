@@ -8,9 +8,28 @@ interface User {
   username?: string | null;
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
+export function normalizeErrorPayload(value: unknown, fallback: string): string {
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    const payload = value as { message?: unknown; error?: unknown; code?: unknown };
+    if (typeof payload.message === 'string' && payload.message.trim()) {
+      return payload.message;
+    }
+    if (typeof payload.error === 'string' && payload.error.trim()) {
+      return payload.error;
+    }
+    if (typeof payload.code === 'string' && payload.code.trim()) {
+      return `${fallback}（${payload.code}）`;
+    }
+  }
+  return fallback;
+}
+
+export function getErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.error || fallback;
+    return normalizeErrorPayload(error.response?.data?.error ?? error.response?.data, fallback);
   }
   return fallback;
 }
