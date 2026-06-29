@@ -5,12 +5,21 @@ dotenv.config();
 
 const { Pool } = pg;
 
-const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+function resolveDatabaseUrl() {
+  return process.env.DATABASE_URL
+    || process.env.POSTGRES_URL
+    || process.env.POSTGRES_PRISMA_URL
+    || process.env.POSTGRES_URL_NON_POOLING
+    || '';
+}
+
+const databaseUrl = resolveDatabaseUrl();
+const hasDatabaseUrl = Boolean(databaseUrl);
 const pool = hasDatabaseUrl
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // Railway 的 PostgreSQL 需要 SSL
-      ssl: process.env.NODE_ENV === 'production'
+      connectionString: databaseUrl,
+      // Vercel / Railway 等托管 PostgreSQL 生产环境通常需要 SSL
+      ssl: process.env.NODE_ENV === 'production' || databaseUrl.includes('sslmode=require')
         ? { rejectUnauthorized: false }
         : false,
     })
@@ -21,7 +30,7 @@ let databaseAvailable = hasDatabaseUrl;
 // 包装查询方法
 export function query(text, params) {
   if (!pool) {
-    throw new Error('未配置 DATABASE_URL');
+    throw new Error('未配置数据库连接，请设置 DATABASE_URL 或 Vercel Postgres 的 POSTGRES_URL');
   }
   return pool.query(text, params);
 }
@@ -34,7 +43,7 @@ export function isDatabaseAvailable() {
 export async function initDB() {
   if (!hasDatabaseUrl) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('生产环境必须设置 DATABASE_URL');
+      throw new Error('生产环境必须设置数据库连接：DATABASE_URL 或 Vercel Postgres 自动注入的 POSTGRES_URL');
     }
     databaseAvailable = false;
     console.warn('⚠️  未设置 DATABASE_URL，文档 API 将使用本地文件 fallback 存储');

@@ -113,6 +113,8 @@ ADMIN_JWT_SECRET=生成另一个足够长的随机字符串
 CORS_ORIGIN=https://你的-vercel-域名.vercel.app
 ```
 
+如果使用 Vercel Postgres，也可以不手写 `DATABASE_URL`，项目会自动识别 Vercel 注入的 `POSTGRES_URL` / `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`。
+
 注册邮箱验证码还需要：
 
 ```env
