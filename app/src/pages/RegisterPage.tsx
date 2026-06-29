@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,6 @@ export function RegisterPage() {
   const [countdown, setCountdown] = useState(0);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
-  const navigate = useNavigate();
   const { requestCode, register } = useAuthStore();
 
   const startCountdown = () => {
@@ -68,8 +67,7 @@ export function RegisterPage() {
     setIsRegistering(false);
 
     if (result.success) {
-      toast.success('注册成功');
-      navigate('/');
+      window.location.assign('/');
     } else {
       toast.error('注册失败', { description: result.error });
     }
