@@ -5,16 +5,20 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // JWT密钥 - 生产环境必须从环境变量读取
-const JWT_SECRET = process.env.JWT_SECRET || (
-  process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('生产环境必须设置 JWT_SECRET 环境变量'); })()
-    : crypto.randomBytes(32).toString('hex')
-);
+const DEV_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+
+function getJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('生产环境必须设置 JWT_SECRET 环境变量');
+  }
+  return DEV_JWT_SECRET;
+}
 
 // 生成JWT令牌
 export function generateToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
 }
 
 // 验证JWT令牌
@@ -31,10 +35,17 @@ export function authenticateToken(req, res, next) {
   }
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     req.user = decoded;
     next();
   } catch (error) {
+    if (error.message === '生产环境必须设置 JWT_SECRET 环境变量') {
+      return res.status(500).json({
+        error: '认证服务未配置 JWT_SECRET',
+        code: 'JWT_SECRET_MISSING',
+        requestId: req.id,
+      });
+    }
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ 
         error: '令牌已过期',
@@ -58,7 +69,7 @@ export function optionalAuth(req, res, next) {
   
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getJwtSecret());
       req.user = decoded;
     } catch (error) {
       // 忽略无效令牌，继续处理请求

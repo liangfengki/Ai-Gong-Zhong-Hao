@@ -15,17 +15,24 @@ dotenv.config();
 const router = Router();
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (
-  process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('生产环境必须设置 ADMIN_PASSWORD 环境变量'); })()
-    : 'change-me'
-);
-const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || (
-  process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('生产环境必须设置 ADMIN_JWT_SECRET 环境变量'); })()
-    : crypto.randomBytes(32).toString('hex')
-);
+const DEV_ADMIN_JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const ADMIN_TOKEN_EXPIRES_IN = '12h';
+
+function getAdminPassword() {
+  if (process.env.ADMIN_PASSWORD) return process.env.ADMIN_PASSWORD;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('生产环境必须设置 ADMIN_PASSWORD 环境变量');
+  }
+  return 'change-me';
+}
+
+function getAdminJwtSecret() {
+  if (process.env.ADMIN_JWT_SECRET) return process.env.ADMIN_JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('生产环境必须设置 ADMIN_JWT_SECRET 环境变量');
+  }
+  return DEV_ADMIN_JWT_SECRET;
+}
 
 function authenticateAdmin(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -36,13 +43,20 @@ function authenticateAdmin(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, ADMIN_JWT_SECRET);
+    const decoded = jwt.verify(token, getAdminJwtSecret());
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: '权限不足', requestId: req.id });
     }
     req.admin = decoded;
     next();
-  } catch {
+  } catch (error) {
+    if (error.message === '生产环境必须设置 ADMIN_JWT_SECRET 环境变量') {
+      return res.status(500).json({
+        error: '后台管理未配置 ADMIN_JWT_SECRET',
+        code: 'ADMIN_JWT_SECRET_MISSING',
+        requestId: req.id,
+      });
+    }
     return res.status(401).json({ error: '管理员令牌无效或已过期', requestId: req.id });
   }
 }
@@ -50,10 +64,22 @@ function authenticateAdmin(req, res, next) {
 // 管理员登录
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
-  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+  let adminPassword;
+  let adminJwtSecret;
+  try {
+    adminPassword = getAdminPassword();
+    adminJwtSecret = getAdminJwtSecret();
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message,
+      code: error.message.includes('ADMIN_PASSWORD') ? 'ADMIN_PASSWORD_MISSING' : 'ADMIN_JWT_SECRET_MISSING',
+      requestId: req.id,
+    });
+  }
+  if (username !== ADMIN_USERNAME || password !== adminPassword) {
     return res.status(401).json({ error: '账号或密码错误', requestId: req.id });
   }
-  const token = jwt.sign({ role: 'admin', username }, ADMIN_JWT_SECRET, { expiresIn: ADMIN_TOKEN_EXPIRES_IN });
+  const token = jwt.sign({ role: 'admin', username }, adminJwtSecret, { expiresIn: ADMIN_TOKEN_EXPIRES_IN });
   res.json({ token, username });
 });
 

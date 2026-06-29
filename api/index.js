@@ -14,6 +14,14 @@ function ensureReady() {
 }
 
 export default async function handler(req, res) {
-  await ensureReady();
+  try {
+    await ensureReady();
+  } catch (error) {
+    console.error('Vercel API 初始化失败:', error);
+    return res.status(500).json({
+      error: error.message || '服务初始化失败',
+      code: 'SERVER_INIT_FAILED',
+    });
+  }
   return app(req, res);
 }
