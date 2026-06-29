@@ -32,11 +32,24 @@ router.post('/register/request-code', async (req, res) => {
     const code = generateCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await saveVerificationCode(email, code, expiresAt);
+    try {
+      await saveVerificationCode(email, code, expiresAt);
+    } catch (error) {
+      console.error('保存验证码失败:', error);
+      return res.status(500).json({
+        error: '验证码保存失败，请检查数据库配置',
+        code: 'VERIFICATION_CODE_SAVE_FAILED',
+        requestId: req.id,
+      });
+    }
 
-    const sent = await sendVerificationEmail(email, code);
-    if (!sent) {
-      return res.status(500).json({ error: '验证码发送失败，请检查邮件服务配置' });
+    const emailResult = await sendVerificationEmail(email, code);
+    if (!emailResult.ok) {
+      return res.status(emailResult.status || 500).json({
+        error: emailResult.message || '验证码发送失败，请检查邮件服务配置',
+        code: emailResult.code || 'EMAIL_SEND_FAILED',
+        requestId: req.id,
+      });
     }
 
     res.json({ message: '验证码已发送' });
