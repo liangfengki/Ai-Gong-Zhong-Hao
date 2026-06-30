@@ -18,12 +18,12 @@ const commonHeaders = {
   'Accept-Encoding': 'gzip, deflate',
 };
 
-// 带重试的API请求
-async function fetchWithRetry(url, retries = 3) {
+// 带短超时的API请求，避免 Serverless 函数被不稳定上游长时间拖住
+async function fetchWithRetry(url, retries = 1, timeout = 2500) {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await axios.get(url, {
-        timeout: 8000,
+        timeout,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
         }
@@ -42,7 +42,7 @@ export async function fetchHotData(source) {
   if (process.env.NODE_ENV !== 'production') {
     try {
       const localApi = process.env.DAILYHOT_API || 'http://localhost:6688';
-      const { data } = await axios.get(`${localApi}/${source}`, { timeout: 8000 });
+      const { data } = await axios.get(`${localApi}/${source}`, { timeout: 1500 });
       if (data.data && data.data.length > 0) {
         return data.data;
       }
@@ -94,6 +94,7 @@ async function crawlHotData(source) {
 async function crawlBaiduHot() {
   try {
     const { data } = await axios.get('https://top.baidu.com/board?tab=realtime', {
+      timeout: 3000,
       headers: { ...commonHeaders }
     });
     const $ = cheerio.load(data);
@@ -153,6 +154,7 @@ async function crawlBaiduHot() {
 async function crawlWeiboHot() {
   try {
     const { data } = await axios.get('https://weibo.com/ajax/side/hotSearch', {
+      timeout: 3000,
       headers: { ...commonHeaders }
     });
 
@@ -176,6 +178,7 @@ async function crawlWeiboHot() {
 async function crawlZhihuHot() {
   try {
     const { data } = await axios.get('https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=30', {
+      timeout: 3000,
       headers: { ...commonHeaders }
     });
 
@@ -199,6 +202,7 @@ async function crawlZhihuHot() {
 async function crawlDouyinHot() {
   try {
     const { data } = await axios.get('https://www.douyin.com/aweme/v1/web/hot/search/list/', {
+      timeout: 3000,
       headers: {
         ...commonHeaders,
         'Referer': 'https://www.douyin.com/'
@@ -224,6 +228,7 @@ async function crawlDouyinHot() {
 async function crawlToutiaoHot() {
   try {
     const { data } = await axios.get('https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc', {
+      timeout: 3000,
       headers: { ...commonHeaders }
     });
 
@@ -246,6 +251,7 @@ async function crawlToutiaoHot() {
 async function crawlBilibiliHot() {
   try {
     const { data } = await axios.get('https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all', {
+      timeout: 3000,
       headers: { ...commonHeaders }
     });
 

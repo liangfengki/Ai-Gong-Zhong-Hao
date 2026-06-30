@@ -4,6 +4,30 @@ import * as cache from '../cache.js';
 
 const router = Router();
 const VALID_SOURCES = ['baidu', 'weibo', 'douyin', 'zhihu', 'toutiao', 'bilibili'];
+const HOT_ALL_SOURCE_TIMEOUT_MS = 3500;
+
+function withTimeout(promise, ms, fallback) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then(resolve)
+      .catch(() => resolve(fallback))
+      .finally(() => clearTimeout(timer));
+  });
+}
+
+function formatHotData(source, data) {
+  return (data || []).map((item, index) => ({
+    title: item.title,
+    hot: item.hot || 0,
+    url: item.url || item.mobileUrl || `https://www.baidu.com/s?wd=${encodeURIComponent(item.title)}`,
+    index: index + 1,
+    desc: item.desc || '',
+    img: item.cover || '',
+    author: item.author || '',
+    source,
+  }));
+}
 
 // 通用热点获取
 async function getHotSource(source, req, res) {
@@ -29,18 +53,7 @@ async function getHotSource(source, req, res) {
 
     // 尝试实时获取
     const hotData = await fetchHotData(source);
-    const formattedData = hotData
-      ? hotData.map((item, index) => ({
-          title: item.title,
-          hot: item.hot || 0,
-          url: item.url || item.mobileUrl || `https://www.baidu.com/s?wd=${encodeURIComponent(item.title)}`,
-          index: index + 1,
-          desc: item.desc || '',
-          img: item.cover || '',
-          author: item.author || '',
-          source,
-        }))
-      : null;
+    const formattedData = hotData ? formatHotData(source, hotData) : null;
 
     if (formattedData) {
       cache.set(`hot:${source}`, formattedData);
@@ -121,7 +134,11 @@ router.get('/hot/all', async (req, res) => {
     }
 
     const promises = VALID_SOURCES.map(source =>
-      fetchHotData(source).then(data => ({ source, data: data || [] }))
+      withTimeout(
+        fetchHotData(source).then(data => ({ source, data: data || [] })),
+        HOT_ALL_SOURCE_TIMEOUT_MS,
+        { source, data: [] }
+      )
     );
 
     const results = await Promise.allSettled(promises);
@@ -133,16 +150,7 @@ router.get('/hot/all', async (req, res) => {
         const { source, data } = result.value;
         if (data.length > 0) {
           hasData = true;
-          hotData[source] = data.map((item, index) => ({
-            title: item.title,
-            hot: item.hot || 0,
-            url: item.url || item.mobileUrl || `https://www.baidu.com/s?wd=${encodeURIComponent(item.title)}`,
-            index: index + 1,
-            desc: item.desc || '',
-            img: item.cover || '',
-            author: item.author || '',
-            source,
-          }));
+          hotData[source] = formatHotData(source, data);
         }
       }
     });

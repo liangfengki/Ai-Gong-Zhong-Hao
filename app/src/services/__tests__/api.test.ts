@@ -48,9 +48,53 @@ describe('API Service', () => {
   })
 
   describe('fetchAllHotTopics', () => {
-    it('returns available hot topics even when one source is slow', async () => {
+    it('uses the aggregate hot endpoint when it returns data', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          data: {
+            baidu: [
+              {
+                title: '聚合热点',
+                url: 'https://example.com/hot',
+                hot: 100,
+                index: 1,
+                desc: '来自聚合接口',
+              },
+            ],
+            weibo: [
+              {
+                title: '微博聚合热点',
+                url: 'https://example.com/weibo',
+                hot: 200,
+                index: 1,
+              },
+            ],
+          },
+          stale: true,
+        },
+      })
+
+      const result = await api.fetchAllHotTopics()
+
+      expect(mockGet).toHaveBeenCalledTimes(1)
+      expect(mockGet).toHaveBeenCalledWith('/api/hot/all')
+      expect(result.topics).toHaveLength(2)
+      expect(result.topics[0]).toMatchObject({
+        title: '聚合热点',
+        source: 'baidu',
+        rank: 1,
+        description: '来自聚合接口',
+      })
+      expect(result.stale).toBe(true)
+      expect(result.mock).toBe(false)
+    })
+
+    it('falls back to single-source endpoints when aggregate returns no data', async () => {
       vi.useFakeTimers()
       mockGet.mockImplementation((url: string) => {
+        if (url === '/api/hot/all') {
+          return Promise.resolve({ data: { data: {}, mock: true } })
+        }
         if (url === '/api/weibo/hot') {
           return new Promise(() => undefined)
         }
@@ -75,6 +119,92 @@ describe('API Service', () => {
       expect(result.topics).toHaveLength(5)
       expect(result.topics.map((topic) => topic.source)).not.toContain('weibo')
       expect(result.mock).toBe(false)
+      expect(mockGet).toHaveBeenCalledWith('/api/hot/all')
+      expect(mockGet).toHaveBeenCalledWith('/api/baidu/hot')
+    })
+  })
+
+  describe('searchAllImages', () => {
+    it('does not let a slow image source block faster sources', async () => {
+      vi.resetModules()
+      const freshApi = await import('../api')
+      vi.useFakeTimers()
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/api/unsplash/search') {
+          return new Promise(() => undefined)
+        }
+        if (url === '/api/pexels/search') {
+          return Promise.resolve({
+            data: {
+              photos: [
+                {
+                  id: 'p1',
+                  src: { large: '/pexels-large.jpg', medium: '/pexels-medium.jpg', original: '/pexels-original.jpg' },
+                  alt: 'pexels image',
+                  photographer: 'Pexels Author',
+                },
+              ],
+              source: 'pexels',
+            },
+          })
+        }
+        return Promise.resolve({
+          data: {
+            hits: [
+              {
+                id: 'px1',
+                largeImageURL: '/pixabay-large.jpg',
+                previewURL: '/pixabay-preview.jpg',
+                tags: 'pixabay image',
+                user: 'Pixabay Author',
+              },
+            ],
+            source: 'pixabay',
+          },
+        })
+      })
+
+      const promise = freshApi.searchAllImages({ query: '风景', page: 1, pageSize: 15 })
+      await vi.advanceTimersByTimeAsync(4500)
+      const result = await promise
+
+      expect(result.images).toHaveLength(2)
+      expect(result.sources).toEqual(['pexels', 'pixabay'])
+      expect(result.images.map((image) => image.source)).toEqual(['pexels', 'pixabay'])
+    })
+
+    it('returns cached image search results for the same filter', async () => {
+      vi.resetModules()
+      const freshApi = await import('../api')
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/api/unsplash/search') {
+          return Promise.resolve({
+            data: {
+              results: [
+                {
+                  id: 'u1',
+                  urls: { regular: '/regular.jpg', thumb: '/thumb.jpg' },
+                  alt_description: 'unsplash image',
+                  user: { name: 'Unsplash Author' },
+                  links: { download: '/download.jpg' },
+                },
+              ],
+              source: 'unsplash',
+            },
+          })
+        }
+        if (url === '/api/pexels/search') {
+          return Promise.resolve({ data: { photos: [], source: 'pexels' } })
+        }
+        return Promise.resolve({ data: { hits: [], source: 'pixabay' } })
+      })
+
+      const filter = { query: '科技', page: 1, pageSize: 15 } as const
+      const first = await freshApi.searchAllImages(filter)
+      const second = await freshApi.searchAllImages(filter)
+
+      expect(first).toEqual(second)
+      expect(mockGet).toHaveBeenCalledTimes(3)
     })
   })
 

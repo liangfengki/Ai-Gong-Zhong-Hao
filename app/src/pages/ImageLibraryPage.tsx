@@ -68,6 +68,7 @@ const categoryTags = [
 
 // 默认加载的关键词
 const DEFAULT_KEYWORD = '风景';
+const IMAGE_PAGE_SIZE = 15;
 
 export function ImageLibraryPage() {
   const navigate = useNavigate();
@@ -109,7 +110,7 @@ export function ImageLibraryPage() {
       const result = await searchAllImages({
         query: q,
         page: nextPage,
-        pageSize: 30,
+        pageSize: IMAGE_PAGE_SIZE,
         orientation: nextOrientation === 'all' ? undefined : (nextOrientation as ImageOrientation),
       });
       
@@ -345,6 +346,12 @@ export function ImageLibraryPage() {
                 </span>
               )}
             </p>
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                刷新中
+              </div>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

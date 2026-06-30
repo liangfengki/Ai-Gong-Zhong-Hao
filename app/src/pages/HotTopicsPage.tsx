@@ -161,7 +161,7 @@ export function HotTopicsPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
-          {loading ? (
+          {loading && hotTopics.length === 0 ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Card key={i}>
@@ -176,9 +176,16 @@ export function HotTopicsPage() {
               ))}
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredTopics.map((topic, index) => (
-                <Card
+            <>
+              {loading && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  刷新中，当前列表会保留显示
+                </div>
+              )}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredTopics.map((topic, index) => (
+                  <Card
                   key={topic.id}
                   role="button"
                   tabIndex={0}
@@ -260,9 +267,10 @@ export function HotTopicsPage() {
                       </a>
                     </div>
                   </CardContent>
-                </Card>
-              ))}
-            </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
           {!loading && filteredTopics.length === 0 && (

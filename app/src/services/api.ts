@@ -19,6 +19,14 @@ interface HotApiResponse {
   mock?: boolean;
 }
 
+interface HotAllApiResponse {
+  data: Partial<Record<HotTopic['source'], HotTopicResponse[]>>;
+  requestId?: string;
+  cached?: boolean;
+  stale?: boolean;
+  mock?: boolean;
+}
+
 interface UnsplashPhoto {
   id: string;
   urls: {
@@ -120,7 +128,12 @@ interface RawAIAnalysisResult {
 // 代理服务器地址（用于避免CORS问题）
 const PROXY_BASE = '/api';
 const HOT_SOURCE_TIMEOUT_MS = 3500;
+const HOT_ALL_TIMEOUT_MS = 4500;
+const IMAGE_SOURCE_TIMEOUT_MS = 4500;
+const IMAGE_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const AI_STREAM_TIMEOUT_MS = 45000;
+const HOT_SOURCES: HotTopic['source'][] = ['baidu', 'weibo', 'douyin', 'zhihu', 'toutiao', 'bilibili'];
+const imageSearchCache = new Map<string, { data: { images: ImageAsset[]; sources: string[] }; expiresAt: number }>();
 
 export function getAuthHeaders(): Record<string, string> {
   try {
@@ -204,6 +217,19 @@ async function fetchHotBySource(source: string): Promise<{ topics: HotTopic[]; s
   }
 }
 
+function mapHotItems(source: HotTopic['source'], items: HotTopicResponse[]): HotTopic[] {
+  return (items || []).map((item, index) => ({
+    id: `${source}-${hashString(item.title)}`,
+    title: item.title,
+    url: item.url || '',
+    hot: item.hot || 0,
+    source,
+    createdAt: new Date().toISOString(),
+    description: item.desc || '',
+    rank: item.index || index + 1,
+  }));
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => resolve(fallback), ms);
@@ -212,6 +238,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
       .catch(() => resolve(fallback))
       .finally(() => window.clearTimeout(timeoutId));
   });
+}
+
+async function fetchHotAllFromAggregate(): Promise<{ topics: HotTopic[]; stale: boolean; mock: boolean }> {
+  const { data } = await axios.get<HotAllApiResponse>(`${PROXY_BASE}/hot/all`);
+  const topics = HOT_SOURCES.flatMap((source) => mapHotItems(source, data.data?.[source] || []));
+
+  return {
+    topics,
+    stale: Boolean(data.stale),
+    mock: Boolean(data.mock) || topics.length === 0,
+  };
 }
 
 // 获取百度热搜
@@ -246,6 +283,16 @@ export async function fetchBilibiliHot() {
 
 // 获取所有热点
 export async function fetchAllHotTopics(): Promise<{ topics: HotTopic[]; stale: boolean; mock: boolean }> {
+  const aggregate = await withTimeout(
+    fetchHotAllFromAggregate(),
+    HOT_ALL_TIMEOUT_MS,
+    { topics: [], stale: false, mock: true }
+  );
+
+  if (aggregate.topics.length > 0) {
+    return aggregate;
+  }
+
   const [baidu, weibo, douyin, zhihu, toutiao, bilibili] = await Promise.allSettled([
     withTimeout(fetchBaiduHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
     withTimeout(fetchWeiboHot(), HOT_SOURCE_TIMEOUT_MS, { topics: [] }),
@@ -361,10 +408,21 @@ export async function searchPixabay(filter: ImageSearchFilter): Promise<{ images
 
 // 搜索所有图片源
 export async function searchAllImages(filter: ImageSearchFilter): Promise<{ images: ImageAsset[]; sources: string[] }> {
+  const cacheKey = JSON.stringify({
+    query: filter.query.trim(),
+    page: filter.page,
+    pageSize: filter.pageSize,
+    orientation: filter.orientation || 'all',
+  });
+  const cached = imageSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
   const [unsplash, pexels, pixabay] = await Promise.allSettled([
-    searchUnsplash(filter),
-    searchPexels(filter),
-    searchPixabay(filter),
+    withTimeout(searchUnsplash(filter), IMAGE_SOURCE_TIMEOUT_MS, { images: [] }),
+    withTimeout(searchPexels(filter), IMAGE_SOURCE_TIMEOUT_MS, { images: [] }),
+    withTimeout(searchPixabay(filter), IMAGE_SOURCE_TIMEOUT_MS, { images: [] }),
   ]);
   
   const images: ImageAsset[] = [];
@@ -382,7 +440,13 @@ export async function searchAllImages(filter: ImageSearchFilter): Promise<{ imag
     if (pixabay.value.source) sources.push(pixabay.value.source);
   }
   
-  return { images, sources };
+  const result = { images, sources };
+  imageSearchCache.set(cacheKey, {
+    data: result,
+    expiresAt: Date.now() + IMAGE_SEARCH_CACHE_TTL_MS,
+  });
+
+  return result;
 }
 
 // ============ AI API ============

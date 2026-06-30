@@ -3,6 +3,9 @@ import axios from 'axios';
 import { imageValidation } from '../middleware/validation.js';
 
 const router = Router();
+const IMAGE_API_TIMEOUT_MS = 4500;
+const IMAGE_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const imageSearchCache = new Map();
 
 // 限制 per_page 范围，防止 DoS
 function clampPerPage(val, defaultVal = 20, max = 50) {
@@ -25,18 +28,49 @@ function generateLoremflickrImages(query, width, height, count, page) {
   });
 }
 
+function getCachedSearch(key) {
+  const cached = imageSearchCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    imageSearchCache.delete(key);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedSearch(key, data) {
+  if (imageSearchCache.size > 200) {
+    const oldestKey = imageSearchCache.keys().next().value;
+    imageSearchCache.delete(oldestKey);
+  }
+  imageSearchCache.set(key, {
+    data,
+    expiresAt: Date.now() + IMAGE_SEARCH_CACHE_TTL_MS,
+  });
+}
+
+function sendCachedJson(res, key, data) {
+  setCachedSearch(key, data);
+  res.json(data);
+}
+
 // Unsplash 搜索（有 API Key 走官方 API，否则用 Loremflickr 关键词搜索兜底）
 router.get('/unsplash/search', imageValidation.search, async (req, res) => {
   try {
     const { query, page = 1, orientation } = req.query;
     const pp = clampPerPage(req.query.per_page);
     const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+    const cacheKey = `unsplash:${query || ''}:${page}:${pp}:${orientation || 'all'}:${accessKey ? 'api' : 'fallback'}`;
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true, requestId: req.id });
+    }
 
     if (!accessKey) {
       const fallbackQuery = query || 'nature';
-      const flickrItems = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrItems = generateLoremflickrImages(fallbackQuery, 640, 480, pp, parseInt(page));
       const flickrThumbs = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
-      const flickrDownloads = generateLoremflickrImages(fallbackQuery, 1920, 1080, pp, parseInt(page));
+      const flickrDownloads = generateLoremflickrImages(fallbackQuery, 1280, 720, pp, parseInt(page));
       const images = flickrItems.map((item, i) => ({
         id: `loremflickr-${page}-${i}`,
         urls: {
@@ -47,7 +81,7 @@ router.get('/unsplash/search', imageValidation.search, async (req, res) => {
         user: { name: 'Lorem Flickr' },
         links: { download: proxyUrl(flickrDownloads[i].rawUrl) },
       }));
-      return res.json({
+      return sendCachedJson(res, cacheKey, {
         results: images,
         requestId: req.id,
         source: 'loremflickr-fallback',
@@ -57,9 +91,10 @@ router.get('/unsplash/search', imageValidation.search, async (req, res) => {
     const { data } = await axios.get('https://api.unsplash.com/search/photos', {
       params: { query, page, per_page: pp, orientation },
       headers: { Authorization: `Client-ID ${accessKey}` },
+      timeout: IMAGE_API_TIMEOUT_MS,
     });
 
-    res.json({
+    sendCachedJson(res, cacheKey, {
       ...data,
       requestId: req.id,
       source: 'unsplash',
@@ -85,11 +120,16 @@ router.get('/pexels/search', imageValidation.search, async (req, res) => {
     const { query, page = 1, orientation } = req.query;
     const pp = clampPerPage(req.query.per_page);
     const apiKey = process.env.PEXELS_API_KEY;
+    const cacheKey = `pexels:${query || ''}:${page}:${pp}:${orientation || 'all'}:${apiKey ? 'api' : 'fallback'}`;
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true, requestId: req.id });
+    }
 
     if (!apiKey) {
       const fallbackQuery = query || 'nature';
-      const flickrOriginals = generateLoremflickrImages(fallbackQuery, 1920, 1080, pp, parseInt(page));
-      const flickrLarges = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrOriginals = generateLoremflickrImages(fallbackQuery, 1280, 720, pp, parseInt(page));
+      const flickrLarges = generateLoremflickrImages(fallbackQuery, 640, 480, pp, parseInt(page));
       const flickrMediums = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
       const images = flickrOriginals.map((item, i) => ({
         id: `loremflickr-pexels-${page}-${i}`,
@@ -101,7 +141,7 @@ router.get('/pexels/search', imageValidation.search, async (req, res) => {
         alt: `${fallbackQuery} ${i + 1}`,
         photographer: 'Lorem Flickr',
       }));
-      return res.json({
+      return sendCachedJson(res, cacheKey, {
         photos: images,
         requestId: req.id,
         source: 'loremflickr-fallback',
@@ -111,9 +151,10 @@ router.get('/pexels/search', imageValidation.search, async (req, res) => {
     const { data } = await axios.get('https://api.pexels.com/v1/search', {
       params: { query, page, per_page: pp, orientation },
       headers: { Authorization: apiKey },
+      timeout: IMAGE_API_TIMEOUT_MS,
     });
 
-    res.json({
+    sendCachedJson(res, cacheKey, {
       ...data,
       requestId: req.id,
       source: 'pexels',
@@ -139,10 +180,15 @@ router.get('/pixabay/search', imageValidation.search, async (req, res) => {
     const { q, page = 1 } = req.query;
     const pp = clampPerPage(req.query.per_page);
     const apiKey = process.env.PIXABAY_API_KEY;
+    const cacheKey = `pixabay:${q || ''}:${page}:${pp}:${apiKey ? 'api' : 'fallback'}`;
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true, requestId: req.id });
+    }
 
     if (!apiKey) {
       const fallbackQuery = q || 'nature';
-      const flickrLarges = generateLoremflickrImages(fallbackQuery, 800, 600, pp, parseInt(page));
+      const flickrLarges = generateLoremflickrImages(fallbackQuery, 640, 480, pp, parseInt(page));
       const flickrPreviews = generateLoremflickrImages(fallbackQuery, 200, 150, pp, parseInt(page));
       const images = flickrLarges.map((item, i) => ({
         id: `loremflickr-pixabay-${page}-${i}`,
@@ -151,7 +197,7 @@ router.get('/pixabay/search', imageValidation.search, async (req, res) => {
         tags: `${fallbackQuery} ${i + 1}`,
         user: 'Lorem Flickr',
       }));
-      return res.json({
+      return sendCachedJson(res, cacheKey, {
         hits: images,
         requestId: req.id,
         source: 'loremflickr-fallback',
@@ -160,9 +206,10 @@ router.get('/pixabay/search', imageValidation.search, async (req, res) => {
 
     const { data } = await axios.get('https://pixabay.com/api/', {
       params: { key: apiKey, q, page, per_page: pp, image_type: 'photo' },
+      timeout: IMAGE_API_TIMEOUT_MS,
     });
 
-    res.json({
+    sendCachedJson(res, cacheKey, {
       ...data,
       requestId: req.id,
       source: 'pixabay',

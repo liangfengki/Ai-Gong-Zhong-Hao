@@ -48,6 +48,7 @@ const makeImage = (id: string): ImageAsset => ({
 describe('ImageLibraryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(searchAllImages).mockReset();
     useAppStore.setState({ pendingImageInserts: [] });
     vi.mocked(searchAllImages).mockResolvedValue({
       images: [makeImage('1')],
@@ -68,7 +69,7 @@ describe('ImageLibraryPage', () => {
     expect(searchAllImages).toHaveBeenCalledWith({
       query: '风景',
       page: 1,
-      pageSize: 30,
+      pageSize: 15,
       orientation: undefined,
     });
   });
@@ -86,9 +87,36 @@ describe('ImageLibraryPage', () => {
       expect(searchAllImages).toHaveBeenLastCalledWith({
         query: '科技',
         page: 1,
-        pageSize: 30,
+        pageSize: 15,
         orientation: 'portrait',
       });
+    });
+  });
+
+  it('loads more images by appending the next page', async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchAllImages)
+      .mockResolvedValueOnce({
+        images: [makeImage('1')],
+        sources: ['unsplash'],
+      })
+      .mockResolvedValueOnce({
+        images: [makeImage('2')],
+        sources: ['unsplash'],
+      });
+
+    render(<ImageLibraryPage />);
+
+    await screen.findByRole('button', { name: '预览图片：图片 1' });
+    await user.click(screen.getByRole('button', { name: /加载更多/ }));
+
+    await screen.findByRole('button', { name: '预览图片：图片 2' });
+    expect(screen.getByRole('button', { name: '预览图片：图片 1' })).toBeInTheDocument();
+    expect(searchAllImages).toHaveBeenLastCalledWith({
+      query: '风景',
+      page: 2,
+      pageSize: 15,
+      orientation: undefined,
     });
   });
 
